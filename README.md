@@ -80,6 +80,16 @@ two catalog entries share a file). All writes are atomic: downloads go to a priv
 into place only when complete, so a reader never sees a half-written file and two runs never
 write the same temp file. Temp leftovers from a killed run are removed after 12 hours.
 
+```
+# terminal 1                                              # terminal 2
+powershell -ExecutionPolicy Bypass -File .\run_stream1.ps1   powershell -ExecutionPolicy Bypass -File .\run_stream2.ps1
+```
+Each category logs to `logs\pull_<category>.log` (git-ignored); watch one with
+`Get-Content logs\pull_hydrology.log -Wait`. If a category fails, the script records it and moves
+on, then prints a SUCCESS/FAILURE line per category. Re-running the same script resumes: finished
+categories are skipped and cached granules are reused. Add `-Cleanup` to delete the raw caches
+once every category in that stream has succeeded.
+
 ### Moving data between machines
 Pull on a fast machine, then publish the processed files as a GitHub Release (not in git history):
 
