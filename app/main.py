@@ -60,10 +60,11 @@ def timeseries(variable: str, bbox: str, start: str | None = None, end: str | No
 
 @app.get("/trend")
 def trend(variable: str, bbox: str, start: str | None = None, end: str | None = None,
-          deseasonalize: bool = True):
+          deseasonalize: bool = True, method: str = "corrected"):
+    """method = corrected (autocorrelation-corrected Mann-Kendall, default) or plain."""
     entry, ser = _series(variable, bbox, start, end)
     try:
-        r = stats.analyze(ser, deseasonalize=deseasonalize)
+        r = stats.analyze(ser, deseasonalize=deseasonalize, method=method)
     except ValueError as ex:
         raise HTTPException(400, str(ex))
     fitted = r.pop("fitted")

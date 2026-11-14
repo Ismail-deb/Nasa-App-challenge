@@ -9,6 +9,26 @@ import pandas as pd
 import pymannkendall as mk
 
 ALPHA = 0.05
+METHODS = ("corrected", "plain")
+# Autocorrelation correction: Hamed & Rao (1998) variance-corrected Mann-Kendall, using the
+# significant autocorrelations of the first HR_LAGS lags (months). Chosen by simulation
+# (see README "Statistical method"); results were insensitive to 3-9 lags.
+HR_LAGS = 4
+
+
+def mann_kendall_p(y: np.ndarray, method: str = "corrected", alpha: float = ALPHA) -> float:
+    """Two-sided Mann-Kendall p-value.
+
+    "plain"     : original test, assumes independent values (too optimistic for monthly data).
+    "corrected" : Hamed-Rao modification. Month-to-month persistence means the series holds
+                  less independent information than its length suggests; the test inflates the
+                  variance of the MK statistic accordingly, giving a larger (more honest) p-value.
+    """
+    if method == "plain":
+        return float(mk.original_test(y, alpha=alpha).p)
+    if method == "corrected":
+        return float(mk.hamed_rao_modification_test(y, alpha=alpha, lag=min(HR_LAGS, len(y) - 2)).p)
+    raise ValueError(f"method must be one of {METHODS}, not {method!r}")
 
 
 def remove_seasonal_cycle(s: pd.Series) -> pd.Series:
@@ -35,12 +55,18 @@ def _sen(t: np.ndarray, y: np.ndarray, alpha: float):
     return slope, intercept, float(slopes[lo]), float(slopes[hi])
 
 
-def analyze(series: pd.Series, deseasonalize: bool = False, alpha: float = ALPHA) -> dict:
+def analyze(series: pd.Series, deseasonalize: bool = False, alpha: float = ALPHA,
+            method: str = "corrected") -> dict:
     """Analyze a monthly series (DatetimeIndex). NaNs are dropped; time is kept in real years.
 
-    Returns slope_per_decade, ci_low/ci_high (per decade), p_value, significant, trend
+    method: "corrected" (default, autocorrelation-corrected Mann-Kendall) or "plain".
+    Sen's slope and its confidence interval do not depend on the method.
+
+    Returns slope_per_decade, ci_low/ci_high (per decade), p_value, significant, method, trend
     ('increasing'/'decreasing'/'no trend'), n_months, record_years, fitted (Series).
     """
+    if method not in METHODS:
+        raise ValueError(f"method must be one of {METHODS}, not {method!r}")
     s = series.astype(float).dropna().sort_index()
     if len(s) < 10:
         raise ValueError("Need at least 10 monthly values to estimate a trend.")
@@ -51,7 +77,7 @@ def analyze(series: pd.Series, deseasonalize: bool = False, alpha: float = ALPHA
     y = work.to_numpy(dtype=float)
 
     slope, intercept, lo, hi = _sen(t, y, alpha)
-    p = float(mk.original_test(y, alpha=alpha).p)
+    p = mann_kendall_p(y, method, alpha)
     significant = p < alpha
     # Fitted line is drawn on the ORIGINAL series so it overlays the plotted data:
     # same slope, intercept re-fitted on the original values (median residual).
@@ -65,6 +91,7 @@ def analyze(series: pd.Series, deseasonalize: bool = False, alpha: float = ALPHA
         "ci_high_per_decade": hi * 10,
         "p_value": p,
         "significant": bool(significant),
+        "method": method,
         "trend": ("increasing" if slope > 0 else "decreasing" if slope < 0 else "no trend"),
         "n_months": int(len(s)),
         "record_years": float(len(s) / 12),
