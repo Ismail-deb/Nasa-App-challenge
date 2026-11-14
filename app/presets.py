@@ -47,6 +47,14 @@ def load_series(entry: dict, region: str) -> pd.Series | None:
     return pd.Series(df["value"].to_numpy(), index=pd.DatetimeIndex(idx), name=var_key(entry))
 
 
+def series_units(entry: dict, region: str) -> str | None:
+    """Units recorded in index.yml for this series file (None if not indexed)."""
+    for r in read_index():
+        if r.get("variable") == entry["id"] and r.get("region") == region:
+            return r.get("units")
+    return None
+
+
 def read_index() -> list:
     p = common.SERIES_DIR / "index.yml"
     if not p.exists():

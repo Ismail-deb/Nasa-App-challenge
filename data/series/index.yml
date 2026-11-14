@@ -100,7 +100,7 @@ series:
   n_months: 309
   n_missing: 0
   origin: pipeline
-  description: How much rain and snow fell, shown as an average rate over the month.
+  description: How much rain and snow fell in the month, in millimetres.
   note: null
 - variable: GPM_3IMERGM/precipitation
   file: precipitation__great_plains.csv
@@ -118,7 +118,7 @@ series:
   n_months: 309
   n_missing: 0
   origin: pipeline
-  description: How much rain and snow fell, shown as an average rate over the month.
+  description: How much rain and snow fell in the month, in millimetres.
   note: null
 - variable: GPM_3IMERGM/precipitation
   file: precipitation__pacific_northwest.csv
@@ -136,7 +136,7 @@ series:
   n_months: 309
   n_missing: 0
   origin: pipeline
-  description: How much rain and snow fell, shown as an average rate over the month.
+  description: How much rain and snow fell in the month, in millimetres.
   note: null
 - variable: GPM_3IMERGM/precipitation
   file: precipitation__southwest.csv
@@ -154,7 +154,7 @@ series:
   n_months: 309
   n_missing: 0
   origin: pipeline
-  description: How much rain and snow fell, shown as an average rate over the month.
+  description: How much rain and snow fell in the month, in millimetres.
   note: null
 - variable: M2TMNXSLV/T2M
   file: T2M__central_valley.csv
@@ -256,10 +256,8 @@ series:
   n_months: 321
   n_missing: 0
   origin: pipeline
-  description: How fast the wind blows about 50 metres up, roughly the height of a
-    wind-turbine hub. This is 50 m wind speed computed from monthly-mean wind components
-    (speed of the mean vector); it underestimates average wind speed and is useful
-    for relative change over time, not for absolute wind resource.
+  description: How fast the wind blows about 50 metres up (turbine hub height); see
+    the note on how it is computed.
   note: 50 m wind speed computed from monthly-mean wind components (speed of the mean
     vector); it underestimates average wind speed and is useful for relative change
     over time, not for absolute wind resource. Reanalysis wind is indicative only,
@@ -280,10 +278,8 @@ series:
   n_months: 321
   n_missing: 0
   origin: pipeline
-  description: How fast the wind blows about 50 metres up, roughly the height of a
-    wind-turbine hub. This is 50 m wind speed computed from monthly-mean wind components
-    (speed of the mean vector); it underestimates average wind speed and is useful
-    for relative change over time, not for absolute wind resource.
+  description: How fast the wind blows about 50 metres up (turbine hub height); see
+    the note on how it is computed.
   note: 50 m wind speed computed from monthly-mean wind components (speed of the mean
     vector); it underestimates average wind speed and is useful for relative change
     over time, not for absolute wind resource. Reanalysis wind is indicative only,
@@ -304,10 +300,8 @@ series:
   n_months: 321
   n_missing: 0
   origin: pipeline
-  description: How fast the wind blows about 50 metres up, roughly the height of a
-    wind-turbine hub. This is 50 m wind speed computed from monthly-mean wind components
-    (speed of the mean vector); it underestimates average wind speed and is useful
-    for relative change over time, not for absolute wind resource.
+  description: How fast the wind blows about 50 metres up (turbine hub height); see
+    the note on how it is computed.
   note: 50 m wind speed computed from monthly-mean wind components (speed of the mean
     vector); it underestimates average wind speed and is useful for relative change
     over time, not for absolute wind resource. Reanalysis wind is indicative only,
@@ -328,10 +322,8 @@ series:
   n_months: 321
   n_missing: 0
   origin: pipeline
-  description: How fast the wind blows about 50 metres up, roughly the height of a
-    wind-turbine hub. This is 50 m wind speed computed from monthly-mean wind components
-    (speed of the mean vector); it underestimates average wind speed and is useful
-    for relative change over time, not for absolute wind resource.
+  description: How fast the wind blows about 50 metres up (turbine hub height); see
+    the note on how it is computed.
   note: 50 m wind speed computed from monthly-mean wind components (speed of the mean
     vector); it underestimates average wind speed and is useful for relative change
     over time, not for absolute wind resource. Reanalysis wind is indicative only,

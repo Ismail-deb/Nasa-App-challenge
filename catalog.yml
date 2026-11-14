@@ -11,6 +11,7 @@ categories:
         version: "5.12.4"
         variable: TOTEXTTAU
         units: "1"
+        unit_label: unitless
         description: >
           How much haze, dust, smoke and pollution particles in the air block sunlight.
           0 is perfectly clear; higher numbers mean hazier skies.
@@ -29,6 +30,7 @@ categories:
         version: "5.12.4"
         variable: CLDTOT
         units: "1"
+        unit_label: fraction (0 to 1)
         description: The fraction of the sky covered by cloud (0 = clear, 1 = fully overcast).
       - id: M2TMNXSLV/TQV
         name: Total water vapour
@@ -67,11 +69,7 @@ categories:
         variable: [U50M, V50M]
         derive: speed            # sqrt(U50M^2 + V50M^2)
         units: m s-1
-        description: >
-          How fast the wind blows about 50 metres up, roughly the height of a wind-turbine hub.
-          This is 50 m wind speed computed from monthly-mean wind components (speed of the mean
-          vector); it underestimates average wind speed and is useful for relative change over
-          time, not for absolute wind resource.
+        description: How fast the wind blows about 50 metres up (turbine hub height); see the note on how it is computed.
         note: >
           50 m wind speed computed from monthly-mean wind components (speed of the mean vector);
           it underestimates average wind speed and is useful for relative change over time, not
@@ -96,8 +94,10 @@ categories:
         group: Grid              # IMERG HDF5 files keep data in the 'Grid' group
         coarsen: 5               # 0.1 -> 0.5 deg block mean (pull_data.py --native to disable)
         variable: precipitation
-        units: mm/hr
-        description: How much rain and snow fell, shown as an average rate over the month.
+        units: mm/hr                # IMERG monthly: mean rate (file attribute units='mm/hr')
+        card_units: mm/month        # display only: rate x 24 x days in month; trend x 730.5
+        relative_change: true       # also report the trend as % of the regional mean
+        description: How much rain and snow fell in the month, in millimetres.
       - id: GLDAS_NOAH025_M/SoilMoi0_10cm_inst
         name: Soil moisture (top 10 cm)
         short_name: GLDAS_NOAH025_M
@@ -116,6 +116,7 @@ categories:
         version: "2.1"         # 2.1 covers 2000-present (2.0 stops 2014)
         variable: Qs_acc
         units: kg m-2
+        unit_label: kg/m² per 3 hours (= mm of water)
         description: Rain or melt that flows over the ground surface instead of soaking in.
         note: A proxy for water availability. It is NOT river flow.
       - id: GLDAS_NOAH025_M/Evap_tavg

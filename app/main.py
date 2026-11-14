@@ -9,7 +9,7 @@ from fastapi.staticfiles import StaticFiles
 
 import common
 import stats
-from app import data, presets
+from app import data, display, presets
 
 WEB = Path(__file__).resolve().parent.parent / "web"
 app = FastAPI(title="Earth System Trend Detective")
@@ -54,7 +54,7 @@ def variables(category: str | None = None):
         start, end = periods.get(e["id"], (None, None))
         out.append({"id": e["id"], "category": c, "name": e["name"],
                     "description": _clean(e["description"]), "note": _clean(e.get("note")),
-                    "units": data.display_units(e), "has_data": gridded or bool(regions),
+                    "units": display.unit_label(e), "has_data": gridded or bool(regions),
                     "gridded": gridded, "presets_available": regions,
                     "period_start": start, "period_end": end})
     return out
@@ -70,7 +70,7 @@ def list_presets():
 
 
 def _series(variable, bbox, start, end):
-    """Monthly regional series in display units. Returns (entry, series, source, region).
+    """Monthly regional series in stored-series units. Returns (entry, series, source, region, units).
 
     1. bbox matches a preset (within presets.BBOX_TOLERANCE) and its series file exists
        -> precomputed series from data/series/   (source = "preset_series")
@@ -88,9 +88,10 @@ def _series(variable, bbox, start, end):
         ser = ser.loc[start:end] if (start or end) else ser
         if ser.empty:
             raise HTTPException(400, "No data in the requested period.")
-        return entry, ser, "preset_series", region
+        units = presets.series_units(entry, region) or data.display_units(entry)
+        return entry, ser, "preset_series", region, units
     try:
-        return entry, data.regional_mean(entry, box, start, end), "gridded", region
+        return entry, data.regional_mean(entry, box, start, end), "gridded", region, data.display_units(entry)
     except FileNotFoundError:
         ready = _preset_regions_with_series(entry)
         hint = (f"{entry['name']} is ready for: {', '.join(ready)}." if ready
@@ -108,9 +109,10 @@ def _values(ser) -> list:
 @app.get("/timeseries")
 def timeseries(variable: str, bbox: str, start: str | None = None, end: str | None = None):
     """bbox = west,south,east,north ; start/end = YYYY-MM"""
-    entry, ser, source, region = _series(variable, bbox, start, end)
-    return {"variable": variable, "units": data.display_units(entry),
-            "dates": [d.strftime("%Y-%m") for d in ser.index], "values": _values(ser),
+    entry, ser, source, region, units = _series(variable, bbox, start, end)
+    return {"variable": variable, "units": display.unit_label(entry),
+            "dates": [d.strftime("%Y-%m") for d in ser.index],
+            "values": _values(display.convert_values(entry, ser, units)),
             "source": source, "region": region}
 
 
@@ -118,18 +120,26 @@ def timeseries(variable: str, bbox: str, start: str | None = None, end: str | No
 def trend(variable: str, bbox: str, start: str | None = None, end: str | None = None,
           deseasonalize: bool = True, method: str = "corrected"):
     """method = corrected (autocorrelation-corrected Mann-Kendall, default) or plain."""
-    entry, ser, source, region = _series(variable, bbox, start, end)
+    entry, ser, source, region, units = _series(variable, bbox, start, end)
     try:
         r = stats.analyze(ser, deseasonalize=deseasonalize, method=method)
     except ValueError as ex:
         raise HTTPException(400, str(ex))
     fitted = r.pop("fitted")
+    region_name = presets.load_presets()[region]["name"] if region else None
+    try:
+        shown = display.present(entry, ser, fitted, r, region_name, units)
+    except ValueError as ex:                      # unexpected stored units: refuse, do not guess
+        raise HTTPException(500, str(ex))
+    values, fitted_shown = shown.pop("values_display"), shown.pop("fitted_display")
+    r.update({k: shown.pop(k) for k in list(shown) if k in r})   # slope/ranges in display units
     return {
-        "variable": variable, "name": entry["name"], "units": data.display_units(entry),
+        "variable": variable, "name": entry["name"],
         "description": _clean(entry["description"]), "note": _clean(entry.get("note")),
-        "dates": [d.strftime("%Y-%m") for d in ser.index], "values": _values(ser),
-        "fitted": _values(fitted.reindex(ser.index)),   # same length as values; gaps -> null
+        "dates": [d.strftime("%Y-%m") for d in ser.index], "values": _values(values),
+        "fitted": _values(fitted_shown.reindex(ser.index)),   # same length as values; gaps -> null
         **{k: (round(v, 5) if isinstance(v, float) else v) for k, v in r.items()},
+        **{k: (round(v, 5) if isinstance(v, float) else v) for k, v in shown.items()},
         "verdict": stats.verdict(r["significant"]),
         "lens_message": None,   # lenses arrive after Step 1 is confirmed
         "source": source,       # "preset_series" (data/series/) or "gridded" (data/processed/)

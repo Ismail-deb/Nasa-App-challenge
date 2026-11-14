@@ -31,9 +31,11 @@ def _catalog_entry(var_id):
 
 
 def test_wind_is_labelled_honestly_in_catalog():
+    """Long explanation in the note (shown on the result card); short clause in the description."""
     e = _catalog_entry("M2TMNXSLV/WIND50M")
     clean = lambda s: " ".join(s.split())
-    assert WIND_LABEL in clean(e["description"]) and WIND_LABEL in clean(e["note"])
+    assert WIND_LABEL in clean(e["note"])
+    assert WIND_LABEL not in clean(e["description"]) and len(e["description"]) < 120
 
 
 def test_soil_moisture_units_explained():

@@ -34,7 +34,7 @@
 <body>
 <header>
   <h1>Earth System Trend Detective</h1>
-  <p>Step 1 prototype · NASA MERRA-2 monthly data · regional screening, not site-level analysis</p>
+  <p>Prototype · NASA MERRA-2, GPM IMERG and GLDAS monthly data · regional screening, not site-level analysis</p>
 </header>
 <main>
   <section class="panel">
@@ -119,7 +119,6 @@ async function run() {
   let d;
   try { d = await api('/trend?' + q); } catch (e) { $('err').textContent = e.message; return; }
 
-  const label = d.deseasonalized ? ' (seasonal cycle removed for the test; chart shows raw values)' : '';
   if (window.Plotly) {
     Plotly.newPlot('chart', [
       {x: d.dates, y: d.values, mode: 'lines', name: 'Monthly regional mean', line: {color: '#6b8fc7', width: 1.5}},
@@ -130,19 +129,17 @@ async function run() {
     $('err').textContent = 'The chart library could not be loaded (check the internet connection); results are shown below.';
   }
 
-  const sign = x => (x > 0 ? '+' : '') + x.toFixed(2);
-  $('cardTitle').textContent = `${d.name}: ${d.trend}`;
+  // all wording and number formatting comes from the server (app/display.py, unit-tested)
+  $('cardTitle').textContent = d.headline;
   $('verdict').textContent = d.verdict;
   $('verdict').className = 'verdict ' + (d.significant ? 'sig' : 'nosig');
-  $('slope').textContent = `${sign(d.slope_per_decade)} ${d.units} / decade`;
-  $('ci').textContent = `${sign(d.ci_low_per_decade)} to ${sign(d.ci_high_per_decade)}`;
+  $('slope').textContent = `${d.slope_text} ${d.units} per decade` + (d.percent_text ? ` (${d.percent_text})` : '');
+  $('ci').textContent = d.range_text + (d.percent_range_text ? ` (${d.percent_range_text})` : '');
   $('ciLabel').textContent = d.method === 'corrected' ? '95% range (adjusted for autocorrelation)' : '95% range (plain)';
   $('p').textContent = d.p_value < 0.001 ? '< 0.001' : d.p_value.toFixed(3);
   $('len').textContent = `${d.record_years.toFixed(1)} years (${d.dates[0]} to ${d.dates[d.dates.length - 1]})`;
   $('cardNote').textContent = d.note ? 'Note: ' + d.note : '';
-  $('plain').textContent = `Over ${d.record_years.toFixed(1)} years, the fitted change is ${sign(d.slope_per_decade)} ${d.units} per decade. ` +
-    `Significant means a trend this large would be unlikely (p < 0.05) if there were only random variation.` + label +
-    (d.method === 'corrected' ? ' The test allows for month-to-month persistence in the data.' : ' Plain test: assumes every month is independent.');
+  $('plain').textContent = d.explanation;
   $('card').classList.remove('hidden');
 }
 
