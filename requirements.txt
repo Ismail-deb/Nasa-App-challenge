@@ -9,3 +9,5 @@ uvicorn
 pyyaml
 pytest
 httpx
+h5netcdf
+h5py

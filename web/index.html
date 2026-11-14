@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Earth System Trend Detective</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/plotly.js/2.35.2/plotly.min.js"></script>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 0; background: #f5f7fa; color: #1b2733; }
+  header { background: #0b3d91; color: #fff; padding: 14px 20px; }
+  header h1 { margin: 0; font-size: 1.3rem; }
+  header p { margin: 4px 0 0; font-size: .9rem; opacity: .85; }
+  main { max-width: 980px; margin: 0 auto; padding: 16px; display: grid; gap: 14px; }
+  .panel { background: #fff; border: 1px solid #dde3ea; border-radius: 8px; padding: 14px; }
+  .row { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; }
+  label { display: grid; gap: 4px; font-size: .8rem; font-weight: 600; }
+  input, select, button { font: inherit; padding: 6px 8px; border: 1px solid #b8c2cc; border-radius: 6px; }
+  input[type=number] { width: 90px; }
+  button { background: #0b3d91; color: #fff; border: 0; cursor: pointer; padding: 8px 16px; }
+  button.secondary { background: #e8eef8; color: #0b3d91; }
+  #desc { font-size: .9rem; margin: 10px 0 0; }
+  #note { font-size: .8rem; color: #6a5200; margin: 4px 0 0; }
+  #card h2 { margin: 0 0 8px; font-size: 1.1rem; }
+  .verdict { font-weight: 700; padding: 3px 10px; border-radius: 12px; display: inline-block; }
+  .sig { background: #d7f0dd; color: #14532d; }
+  .nosig { background: #fdf0c8; color: #6a5200; }
+  .stats { display: flex; flex-wrap: wrap; gap: 24px; margin: 12px 0 4px; }
+  .stats div span { display: block; font-size: .75rem; color: #5b6b7b; }
+  .stats div b { font-size: 1.2rem; }
+  #err { color: #b00020; }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Earth System Trend Detective</h1>
+  <p>Step 1 prototype · NASA MERRA-2 monthly data · regional screening, not site-level analysis</p>
+</header>
+<main>
+  <section class="panel">
+    <div class="row">
+      <label>Variable <select id="variable"></select></label>
+      <label>West <input type="number" id="w" step="0.5" value="-115"></label>
+      <label>South <input type="number" id="s" step="0.5" value="31"></label>
+      <label>East <input type="number" id="e" step="0.5" value="-109"></label>
+      <label>North <input type="number" id="n" step="0.5" value="37"></label>
+      <label>Start <input type="month" id="start" value="2000-01"></label>
+      <label>End <input type="month" id="end"></label>
+      <label style="grid-auto-flow:column;align-items:center"><input type="checkbox" id="deseason" checked> Remove seasonal cycle</label>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <button id="go">Show trend</button>
+      <button class="secondary" id="demo">Demo: US Southwest (AZ/NV)</button>
+    </div>
+    <p id="desc"></p><p id="note"></p>
+    <p id="err"></p>
+  </section>
+
+  <section class="panel"><div id="chart" style="height:380px"></div></section>
+
+  <section class="panel hidden" id="card">
+    <h2 id="cardTitle"></h2>
+    <span class="verdict" id="verdict"></span>
+    <div class="stats">
+      <div><span>Change per decade</span><b id="slope"></b></div>
+      <div><span>95% range</span><b id="ci"></b></div>
+      <div><span>p-value</span><b id="p"></b></div>
+      <div><span>Record length</span><b id="len"></b></div>
+    </div>
+    <p id="plain"></p>
+  </section>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+let vars = [];
+
+async function api(path) {
+  const r = await fetch(path);
+  const j = await r.json();
+  if (!r.ok) throw new Error(j.detail || r.statusText);
+  return j;
+}
+
+function showDesc() {
+  const v = vars.find(x => x.id === $('variable').value);
+  $('desc').textContent = v ? v.description : '';
+  $('note').textContent = v && v.note ? 'Note: ' + v.note : '';
+}
+
+async function init() {
+  vars = await api('/variables');
+  $('variable').innerHTML = vars.map(v => `<option value="${v.id}">${v.name} (${v.units})${v.has_data ? '' : ' – no data pulled yet'}</option>`).join('');
+  $('variable').onchange = showDesc;
+  showDesc();
+}
+
+function demo() {
+  $('w').value = -115; $('s').value = 31; $('e').value = -109; $('n').value = 37;
+  run();
+}
+
+async function run() {
+  $('err').textContent = '';
+  const bbox = [$('w').value, $('s').value, $('e').value, $('n').value].join(',');
+  const q = new URLSearchParams({variable: $('variable').value, bbox, deseasonalize: $('deseason').checked});
+  if ($('start').value) q.set('start', $('start').value);
+  if ($('end').value) q.set('end', $('end').value);
+  let d;
+  try { d = await api('/trend?' + q); } catch (e) { $('err').textContent = e.message; return; }
+
+  const label = d.deseasonalized ? ' (seasonal cycle removed for the test; chart shows raw values)' : '';
+  Plotly.newPlot('chart', [
+    {x: d.dates, y: d.values, mode: 'lines', name: 'Monthly regional mean', line: {color: '#6b8fc7', width: 1.5}},
+    {x: d.dates, y: d.fitted, mode: 'lines', name: 'Trend (Sen\'s slope)', line: {color: '#d9480f', width: 3}},
+  ], {title: d.name, yaxis: {title: d.units}, margin: {t: 40, r: 10}, legend: {orientation: 'h', y: -0.15}},
+  {responsive: true});
+
+  const sign = x => (x > 0 ? '+' : '') + x.toFixed(2);
+  $('cardTitle').textContent = `${d.name}: ${d.trend}`;
+  $('verdict').textContent = d.verdict;
+  $('verdict').className = 'verdict ' + (d.significant ? 'sig' : 'nosig');
+  $('slope').textContent = `${sign(d.slope_per_decade)} ${d.units} / decade`;
+  $('ci').textContent = `${sign(d.ci_low_per_decade)} to ${sign(d.ci_high_per_decade)}`;
+  $('p').textContent = d.p_value < 0.001 ? '< 0.001' : d.p_value.toFixed(3);
+  $('len').textContent = `${d.record_years.toFixed(1)} years`;
+  $('plain').textContent = `Over ${d.record_years.toFixed(1)} years, the fitted change is ${sign(d.slope_per_decade)} ${d.units} per decade. ` +
+    `Significant means a trend this large would be unlikely (p < 0.05) if there were only random variation.` + label;
+  $('card').classList.remove('hidden');
+}
+
+$('go').onclick = run;
+$('demo').onclick = demo;
+init().catch(e => $('err').textContent = e.message);
+</script>
+</body>
+</html>
