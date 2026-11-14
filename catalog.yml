@@ -67,8 +67,15 @@ categories:
         variable: [U50M, V50M]
         derive: speed            # sqrt(U50M^2 + V50M^2)
         units: m s-1
-        description: How fast the wind blows about 50 metres up, roughly the height of a wind-turbine hub.
-        note: Reanalysis wind is indicative only; it is not a measurement at a specific site.
+        description: >
+          How fast the wind blows about 50 metres up, roughly the height of a wind-turbine hub.
+          This is 50 m wind speed computed from monthly-mean wind components (speed of the mean
+          vector); it underestimates average wind speed and is useful for relative change over
+          time, not for absolute wind resource.
+        note: >
+          50 m wind speed computed from monthly-mean wind components (speed of the mean vector);
+          it underestimates average wind speed and is useful for relative change over time, not
+          for absolute wind resource. Reanalysis wind is indicative only, not a site measurement.
       - id: GPM_3IMERGDF/heavy_rain_days
         name: Heavy-rain days per month
         short_name: GPM_3IMERGDF
@@ -97,8 +104,12 @@ categories:
         version: "2.1"         # 2.1 covers 2000-present (2.0 stops 2014)
         variable: SoilMoi0_10cm_inst
         units: kg m-2
-        description: How much water is held in the top 10 cm of soil, where crop seedlings and grass roots live.
-        note: GLDAS is a land-surface model driven by observations, not a direct soil measurement.
+        description: >
+          How much water is held in the top 10 cm of soil, where crop seedlings and grass roots
+          live. Shown in kg/m², which is the same as millimetres of water in that layer.
+        note: >
+          GLDAS is a land-surface model driven by observations, not a direct soil measurement.
+          Values are a monthly average for the whole region; local fields can differ a lot.
       - id: GLDAS_NOAH025_M/Qs_acc
         name: Surface runoff (water-availability proxy)
         short_name: GLDAS_NOAH025_M

@@ -126,3 +126,16 @@ def test_missing_months_are_null_and_fitted_aligned(env):
     assert len(j["fitted"]) == len(j["values"]) == len(j["dates"]) == N
     assert j["fitted"][3] is None and j["fitted"][4] is not None
     assert j["n_months"] == N - 2
+
+
+def test_variables_report_real_data_period_from_index(env):
+    client, _, series = env
+    series.mkdir(parents=True, exist_ok=True)
+    (series / "index.yml").write_text(
+        "series:\n"
+        "- {variable: M2TMNXSLV/T2M, region: boxa, period_start: '2000-01', period_end: '2026-09'}\n"
+        "- {variable: M2TMNXSLV/T2M, region: boxb, period_start: '2001-01', period_end: '2026-07'}\n",
+        encoding="utf-8")
+    v = {x["id"]: x for x in client.get("/variables").json()}
+    assert (v[T2M]["period_start"], v[T2M]["period_end"]) == ("2000-01", "2026-09")
+    assert v["M2TMNXRAD/SWGDN"]["period_start"] is None

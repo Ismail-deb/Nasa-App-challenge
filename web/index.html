@@ -68,6 +68,7 @@
       <div><span>Record length</span><b id="len"></b></div>
     </div>
     <p id="plain"></p>
+    <p id="cardNote" style="font-size:.85rem;color:#6a5200"></p>
   </section>
 </main>
 <script>
@@ -84,7 +85,8 @@ async function api(path) {
 function showDesc() {
   const v = vars.find(x => x.id === $('variable').value);
   $('desc').textContent = v ? v.description : '';
-  $('note').textContent = v && v.note ? 'Note: ' + v.note : '';
+  $('note').textContent = (v && v.note ? 'Note: ' + v.note : '') +
+    (v && v.period_start ? ` Data available ${v.period_start} to ${v.period_end}.` : '');
 }
 
 async function init() {
@@ -136,7 +138,8 @@ async function run() {
   $('ci').textContent = `${sign(d.ci_low_per_decade)} to ${sign(d.ci_high_per_decade)}`;
   $('ciLabel').textContent = d.method === 'corrected' ? '95% range (adjusted for autocorrelation)' : '95% range (plain)';
   $('p').textContent = d.p_value < 0.001 ? '< 0.001' : d.p_value.toFixed(3);
-  $('len').textContent = `${d.record_years.toFixed(1)} years`;
+  $('len').textContent = `${d.record_years.toFixed(1)} years (${d.dates[0]} to ${d.dates[d.dates.length - 1]})`;
+  $('cardNote').textContent = d.note ? 'Note: ' + d.note : '';
   $('plain').textContent = `Over ${d.record_years.toFixed(1)} years, the fitted change is ${sign(d.slope_per_decade)} ${d.units} per decade. ` +
     `Significant means a trend this large would be unlikely (p < 0.05) if there were only random variation.` + label +
     (d.method === 'corrected' ? ' The test allows for month-to-month persistence in the data.' : ' Plain test: assumes every month is independent.');

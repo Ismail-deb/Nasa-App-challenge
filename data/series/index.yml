@@ -16,6 +16,11 @@ series:
   n_months: 319
   n_missing: 0
   origin: pipeline
+  description: How much water is held in the top 10 cm of soil, where crop seedlings
+    and grass roots live. Shown in kg/m², which is the same as millimetres of water
+    in that layer.
+  note: GLDAS is a land-surface model driven by observations, not a direct soil measurement.
+    Values are a monthly average for the whole region; local fields can differ a lot.
 - variable: GLDAS_NOAH025_M/SoilMoi0_10cm_inst
   file: SoilMoi0_10cm_inst__great_plains.csv
   region: great_plains
@@ -32,6 +37,11 @@ series:
   n_months: 319
   n_missing: 0
   origin: pipeline
+  description: How much water is held in the top 10 cm of soil, where crop seedlings
+    and grass roots live. Shown in kg/m², which is the same as millimetres of water
+    in that layer.
+  note: GLDAS is a land-surface model driven by observations, not a direct soil measurement.
+    Values are a monthly average for the whole region; local fields can differ a lot.
 - variable: GLDAS_NOAH025_M/SoilMoi0_10cm_inst
   file: SoilMoi0_10cm_inst__pacific_northwest.csv
   region: pacific_northwest
@@ -48,6 +58,11 @@ series:
   n_months: 319
   n_missing: 0
   origin: pipeline
+  description: How much water is held in the top 10 cm of soil, where crop seedlings
+    and grass roots live. Shown in kg/m², which is the same as millimetres of water
+    in that layer.
+  note: GLDAS is a land-surface model driven by observations, not a direct soil measurement.
+    Values are a monthly average for the whole region; local fields can differ a lot.
 - variable: GLDAS_NOAH025_M/SoilMoi0_10cm_inst
   file: SoilMoi0_10cm_inst__southwest.csv
   region: southwest
@@ -64,6 +79,11 @@ series:
   n_months: 319
   n_missing: 0
   origin: pipeline
+  description: How much water is held in the top 10 cm of soil, where crop seedlings
+    and grass roots live. Shown in kg/m², which is the same as millimetres of water
+    in that layer.
+  note: GLDAS is a land-surface model driven by observations, not a direct soil measurement.
+    Values are a monthly average for the whole region; local fields can differ a lot.
 - variable: GPM_3IMERGM/precipitation
   file: precipitation__central_valley.csv
   region: central_valley
@@ -80,6 +100,8 @@ series:
   n_months: 309
   n_missing: 0
   origin: pipeline
+  description: How much rain and snow fell, shown as an average rate over the month.
+  note: null
 - variable: GPM_3IMERGM/precipitation
   file: precipitation__great_plains.csv
   region: great_plains
@@ -96,6 +118,8 @@ series:
   n_months: 309
   n_missing: 0
   origin: pipeline
+  description: How much rain and snow fell, shown as an average rate over the month.
+  note: null
 - variable: GPM_3IMERGM/precipitation
   file: precipitation__pacific_northwest.csv
   region: pacific_northwest
@@ -112,6 +136,8 @@ series:
   n_months: 309
   n_missing: 0
   origin: pipeline
+  description: How much rain and snow fell, shown as an average rate over the month.
+  note: null
 - variable: GPM_3IMERGM/precipitation
   file: precipitation__southwest.csv
   region: southwest
@@ -128,6 +154,8 @@ series:
   n_months: 309
   n_missing: 0
   origin: pipeline
+  description: How much rain and snow fell, shown as an average rate over the month.
+  note: null
 - variable: M2TMNXSLV/T2M
   file: T2M__central_valley.csv
   region: central_valley
@@ -144,6 +172,11 @@ series:
   n_months: 321
   n_missing: 0
   origin: pipeline
+  description: How warm the air is about 2 metres (6 feet) above the ground, averaged
+    over a month. It is the temperature a thermometer in a weather shelter would read.
+  note: 'MERRA-2 is a reanalysis: a weather model that continuously absorbs satellite
+    and ground observations. Good for regional trends, but not a substitute for station
+    records.'
 - variable: M2TMNXSLV/T2M
   file: T2M__great_plains.csv
   region: great_plains
@@ -160,6 +193,11 @@ series:
   n_months: 321
   n_missing: 0
   origin: pipeline
+  description: How warm the air is about 2 metres (6 feet) above the ground, averaged
+    over a month. It is the temperature a thermometer in a weather shelter would read.
+  note: 'MERRA-2 is a reanalysis: a weather model that continuously absorbs satellite
+    and ground observations. Good for regional trends, but not a substitute for station
+    records.'
 - variable: M2TMNXSLV/T2M
   file: T2M__pacific_northwest.csv
   region: pacific_northwest
@@ -176,6 +214,11 @@ series:
   n_months: 321
   n_missing: 0
   origin: pipeline
+  description: How warm the air is about 2 metres (6 feet) above the ground, averaged
+    over a month. It is the temperature a thermometer in a weather shelter would read.
+  note: 'MERRA-2 is a reanalysis: a weather model that continuously absorbs satellite
+    and ground observations. Good for regional trends, but not a substitute for station
+    records.'
 - variable: M2TMNXSLV/T2M
   file: T2M__southwest.csv
   region: southwest
@@ -192,6 +235,11 @@ series:
   n_months: 321
   n_missing: 0
   origin: pipeline
+  description: How warm the air is about 2 metres (6 feet) above the ground, averaged
+    over a month. It is the temperature a thermometer in a weather shelter would read.
+  note: 'MERRA-2 is a reanalysis: a weather model that continuously absorbs satellite
+    and ground observations. Good for regional trends, but not a substitute for station
+    records.'
 - variable: M2TMNXSLV/WIND50M
   file: WIND50M__central_valley.csv
   region: central_valley
@@ -208,6 +256,14 @@ series:
   n_months: 321
   n_missing: 0
   origin: pipeline
+  description: How fast the wind blows about 50 metres up, roughly the height of a
+    wind-turbine hub. This is 50 m wind speed computed from monthly-mean wind components
+    (speed of the mean vector); it underestimates average wind speed and is useful
+    for relative change over time, not for absolute wind resource.
+  note: 50 m wind speed computed from monthly-mean wind components (speed of the mean
+    vector); it underestimates average wind speed and is useful for relative change
+    over time, not for absolute wind resource. Reanalysis wind is indicative only,
+    not a site measurement.
 - variable: M2TMNXSLV/WIND50M
   file: WIND50M__great_plains.csv
   region: great_plains
@@ -224,6 +280,14 @@ series:
   n_months: 321
   n_missing: 0
   origin: pipeline
+  description: How fast the wind blows about 50 metres up, roughly the height of a
+    wind-turbine hub. This is 50 m wind speed computed from monthly-mean wind components
+    (speed of the mean vector); it underestimates average wind speed and is useful
+    for relative change over time, not for absolute wind resource.
+  note: 50 m wind speed computed from monthly-mean wind components (speed of the mean
+    vector); it underestimates average wind speed and is useful for relative change
+    over time, not for absolute wind resource. Reanalysis wind is indicative only,
+    not a site measurement.
 - variable: M2TMNXSLV/WIND50M
   file: WIND50M__pacific_northwest.csv
   region: pacific_northwest
@@ -240,6 +304,14 @@ series:
   n_months: 321
   n_missing: 0
   origin: pipeline
+  description: How fast the wind blows about 50 metres up, roughly the height of a
+    wind-turbine hub. This is 50 m wind speed computed from monthly-mean wind components
+    (speed of the mean vector); it underestimates average wind speed and is useful
+    for relative change over time, not for absolute wind resource.
+  note: 50 m wind speed computed from monthly-mean wind components (speed of the mean
+    vector); it underestimates average wind speed and is useful for relative change
+    over time, not for absolute wind resource. Reanalysis wind is indicative only,
+    not a site measurement.
 - variable: M2TMNXSLV/WIND50M
   file: WIND50M__southwest.csv
   region: southwest
@@ -256,3 +328,11 @@ series:
   n_months: 321
   n_missing: 0
   origin: pipeline
+  description: How fast the wind blows about 50 metres up, roughly the height of a
+    wind-turbine hub. This is 50 m wind speed computed from monthly-mean wind components
+    (speed of the mean vector); it underestimates average wind speed and is useful
+    for relative change over time, not for absolute wind resource.
+  note: 50 m wind speed computed from monthly-mean wind components (speed of the mean
+    vector); it underestimates average wind speed and is useful for relative change
+    over time, not for absolute wind resource. Reanalysis wind is indicative only,
+    not a site measurement.

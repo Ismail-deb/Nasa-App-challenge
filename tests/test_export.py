@@ -78,3 +78,20 @@ def test_rerun_keeps_series_exported_elsewhere_and_is_deterministic(env):
     assert (series / "T2M__boxa.csv").exists()
     assert (series / "index.yml").read_text(encoding="utf-8") == first       # unchanged
     assert not list(series.glob("*.part-*"))
+
+
+def test_index_carries_notes_and_refreshes_them_for_kept_series(env):
+    proc, series = env
+    write_grid(proc / "M2TMNXSLV_T2M.nc", [283.15, 313.15])
+    export_series.export(["M2TMNXSLV/T2M"])
+    r = presets.read_index()[0]
+    assert r["description"].startswith("How warm the air") and "reanalysis" in r["note"]
+    # a series kept from another machine with an OLD index entry (no note) gets the catalog note
+    idx = (series / "index.yml").read_text(encoding="utf-8")
+    import re
+    (series / "index.yml").write_text(re.sub(r"\n  (description|note):.*", "", idx), encoding="utf-8")
+    assert "note" not in presets.read_index()[0]
+    data._open.cache_clear(); gc.collect()
+    (proc / "M2TMNXSLV_T2M.nc").unlink()
+    export_series.export(["M2TMNXSLV/T2M"])
+    assert all("reanalysis" in r["note"] for r in presets.read_index())

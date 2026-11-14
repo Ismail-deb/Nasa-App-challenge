@@ -37,6 +37,14 @@ def write_csv(ser, path):
     os.replace(tmp, path)
 
 
+def catalog_fields(entry) -> dict:
+    """Index fields that come from catalog.yml (refreshed on every run, even for kept series)."""
+    clean = lambda s: " ".join(s.split()) if s else None
+    return {"units": data.display_units(entry),
+            "source": f"NASA {entry['short_name']} v{entry.get('version', '?')}",
+            "description": clean(entry.get("description")), "note": clean(entry.get("note"))}
+
+
 def index_record(entry, region, preset, ser):
     valid = ser.dropna()
     return {
@@ -52,6 +60,7 @@ def index_record(entry, region, preset, ser):
         "n_months": int(len(ser)),
         "n_missing": int(len(ser) - len(valid)),
         "origin": "pipeline",
+        **{k: v for k, v in catalog_fields(entry).items() if k in ("description", "note")},
     }
 
 
@@ -70,7 +79,7 @@ def export(variables=VARIABLES) -> dict:
             for region in regions:                       # keep series exported elsewhere
                 key = (var_id, region)
                 if key in old and presets.series_path(entry, region).exists():
-                    new[key] = old[key]
+                    new[key] = {**old[key], **catalog_fields(entry)}
                     report["kept"].append(old[key]["file"])
             continue
         for region, p in regions.items():

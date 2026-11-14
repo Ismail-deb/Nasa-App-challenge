@@ -37,15 +37,26 @@ def _preset_regions_with_series(entry: dict) -> list:
     return [pid for pid in presets.load_presets() if presets.series_path(entry, pid).exists()]
 
 
+def _periods() -> dict:
+    """variable id -> (first month, last month) over its exported preset series."""
+    out = {}
+    for r in presets.read_index():
+        a, b = out.get(r["variable"], (r["period_start"], r["period_end"]))
+        out[r["variable"]] = (min(a, r["period_start"]), max(b, r["period_end"]))
+    return out
+
+
 @app.get("/variables")
 def variables(category: str | None = None):
-    out = []
+    out, periods = [], _periods()
     for c, e in common.iter_entries(common.load_catalog(), category):
         gridded, regions = common.processed_path(e).exists(), _preset_regions_with_series(e)
+        start, end = periods.get(e["id"], (None, None))
         out.append({"id": e["id"], "category": c, "name": e["name"],
                     "description": _clean(e["description"]), "note": _clean(e.get("note")),
                     "units": data.display_units(e), "has_data": gridded or bool(regions),
-                    "gridded": gridded, "presets_available": regions})
+                    "gridded": gridded, "presets_available": regions,
+                    "period_start": start, "period_end": end})
     return out
 
 

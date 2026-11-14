@@ -176,12 +176,24 @@ selects the basic test; the unadjusted range is also returned as `ci_plain_low/h
 - A significant trend says the change is unlikely to be chance. It does not say what caused it.
 
 ## Data sources
-- NASA GES DISC, MERRA-2 `M2TMNXSLV` (monthly single-level diagnostics), accessed with `earthaccess`.
+- NASA GES DISC, accessed with `earthaccess`: MERRA-2 `M2TMNXSLV` (temperature, 50 m wind),
+  GPM IMERG `GPM_3IMERGM` v07 (precipitation), GLDAS Noah `GLDAS_NOAH025_M` v2.1 (soil moisture).
 
 ## Limitations
 - Monthly data only; linear trends (Sen's slope) over a limited record.
 - Reanalysis (MERRA-2) is model output assimilating observations – indicative, not station truth.
 - Regional screening only; not site-level feasibility or irrigation scheduling.
+- **Wind:** this is 50 m wind speed computed from monthly-mean wind components (speed of the mean
+  vector); it underestimates average wind speed and is useful for relative change over time, not
+  for absolute wind resource. Because winds change direction during a month, the mean vector is
+  shorter than the average speed; the preset regions show about 2-3 m/s, well below real 50 m
+  averages. Do not use these values to size turbines or estimate energy yield.
+- **Soil moisture** (GLDAS) is a land-surface model estimate driven by observations, not a direct
+  measurement, averaged over the whole region; shown in kg/m², the same as mm of water in the top 10 cm.
+- **Different record lengths:** each variable ends when its NASA product does. Currently
+  temperature and wind run 2000-01 to 2026-09, soil moisture to 2026-07, and precipitation to
+  2025-09 (IMERG's final product lags by about a year). The app shows each variable's real period;
+  trends for different variables cover slightly different years.
 
 ## Credits
 - Data: NASA GES DISC / Earthdata. MERRA-2: GMAO, NASA.
