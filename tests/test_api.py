@@ -48,3 +48,14 @@ def test_dateline_box_and_tiny_box(client):
     e = data.find_entry("M2TMNXSLV/T2M")
     assert len(data.regional_mean(e, (170, -10, -170, 10), "2000-01", "2001-12")) == 24
     assert len(data.regional_mean(e, (10.0, 10.0, 10.01, 10.01), None, None)) == 240
+
+
+def test_trend_method_parameter_and_added_fields(client):
+    q = {"variable": "M2TMNXSLV/T2M", "bbox": "-115,31,-109,37"}
+    default = client.get("/trend", params=q).json()
+    plain = client.get("/trend", params={**q, "method": "plain"}).json()
+    assert default["method"] == "corrected" and plain["method"] == "plain"
+    assert default["record_years"] == 20.0                       # 240 months
+    assert default["slope_per_decade"] == plain["slope_per_decade"]
+    assert set(plain) == set(default)                            # same response shape
+    assert client.get("/trend", params={**q, "method": "magic"}).status_code == 400
