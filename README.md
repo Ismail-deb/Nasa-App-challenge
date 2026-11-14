@@ -106,9 +106,54 @@ release file to under 2 GB.
 - `catalog.yml` – variables, grouped in 5 categories, with plain-language descriptions.
 - `check_catalog.py` – searches NASA CMR via `earthaccess`; reports what resolves and the real variable names/units.
 - `pull_data.py` – downloads monthly granules and writes compact NetCDF to `data/processed/`. The running app never downloads from NASA.
-- `stats.py` – Sen's slope per decade, Mann-Kendall p-value (pymannkendall), optional seasonal-cycle removal.
+- `stats.py` – Sen's slope per decade, autocorrelation-corrected Mann-Kendall p-value (pymannkendall), optional seasonal-cycle removal.
 - `app/main.py` – FastAPI: cos(lat) area-weighted regional means, unit conversion, `/trend`.
 - `web/index.html` – single page with Plotly chart and result card.
+
+## Statistical method
+
+**How big is the change?** We draw the trend line with *Sen's slope*: the middle value of the
+slopes between every pair of months. One freak month cannot drag it around, unlike an ordinary
+best-fit line. It is reported per decade, with a **95% range (adjusted for autocorrelation)**:
+the span of slopes that fit the data reasonably well.
+
+**Is the change real?** Weather wobbles from month to month, so even a region with no long-term
+change will show some slope by luck. The *Mann-Kendall test* asks: if there were no real trend,
+how often would wobbles alone produce a trend this consistent? That chance is the **p-value**.
+When it is below 0.05 (less than 1 in 20) we call the trend "significant". A p-value is *not* the
+chance that the trend is wrong, and "not significant" does not mean "no change"; it means the
+record is too short or too noisy to tell yet.
+
+**The correction for autocorrelation.** *Autocorrelation* means each month tends to resemble the
+month before it: a warm, dry spell often lasts for several months. The basic test assumes every
+month is a fresh, independent measurement, so it treats 300 months as 300 separate pieces of
+evidence when they are really fewer, and it becomes overconfident. We use the *Hamed-Rao*
+correction: it measures how strongly each month resembles the previous 1 to 4 months and widens
+the uncertainty to match. The same adjustment is applied to both the p-value and the 95% range.
+
+How well it works, checked on 200 computer-made series that have this month-to-month memory but
+**no** trend:
+
+| | Basic test | Corrected (what the app uses) |
+|---|---|---|
+| False alarms ("significant" when there is no trend; target 5%) | 31% | 7% |
+| 95% range contains the true slope (target 95%) | 69% | 93% |
+
+With a real trend added, the corrected test still detected it 82% of the time (basic test: 96%,
+but the basic test also cries wolf far more often). On series with no month-to-month memory the
+correction usually changes nothing. Example: for 2 m temperature over the US Southwest
+(2000-2026) the trend is +0.49 °C per decade either way; the 95% range widens from +0.28 to +0.69
+to **+0.25 to +0.72**, and the trend stays significant (p = 0.00005). `method=plain` in the API
+selects the basic test; the unadjusted range is also returned as `ci_plain_low/high_per_decade`.
+
+**Limitations.**
+- The corrected test is still slightly generous: about 7% false alarms instead of 5%, and more for
+  very persistent data or records shorter than about 10 years.
+- A straight line is a simplification: it cannot describe a change that speeds up, reverses, or
+  happens as a sudden step.
+- Slow natural cycles lasting years (such as El Niño) can look like a trend in a short record.
+- Removing the seasonal cycle (on by default) matters: without it, the yearly swing swamps the test.
+- A significant trend says the change is unlikely to be chance. It does not say what caused it.
 
 ## Data sources
 - NASA GES DISC, MERRA-2 `M2TMNXSLV` (monthly single-level diagnostics), accessed with `earthaccess`.
