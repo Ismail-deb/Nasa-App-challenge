@@ -201,15 +201,35 @@ def size_ok(path, g) -> bool:
     return exp is None or os.path.getsize(path) >= 0.98 * exp
 
 
+OPEN_RETRIES = 6   # attempts for a transient "access denied" on Windows (see read_granule)
+
+
+def _access_denied(ex: BaseException) -> bool:
+    return isinstance(ex, PermissionError) or getattr(ex, "errno", None) == 13 or "[Errno 13]" in str(ex)
+
+
 def read_granule(path, group, entries, g):
-    """Fully read one granule: (month, {entry id: (lat, lon) array}). Raises if partial/corrupt."""
+    """Fully read one granule: (month, {entry id: (lat, lon) array}). Raises if partial/corrupt.
+
+    On Windows, opening a file at the instant another process renames it into the cache fails
+    briefly with "access denied" (errno 13). That says nothing about the file being bad, so it is
+    retried with a short back-off; only other errors (or a persistent denial) count as corrupt.
+    """
+    import time
+
     if not size_ok(path, g):
         raise OSError(f"{os.path.basename(path)} is smaller than its NASA metadata size (partial)")
-    with open_granule(str(path), group) as ds:
-        month = granule_month(ds, str(path))
-        # extract all before writing any; coarsen only entries that ask for it
-        arrays = {e["id"]: block_mean(extract(ds, e), e.get("coarsen", 1) or 1) for e in entries}
-    return month, arrays
+    for attempt in range(OPEN_RETRIES):
+        try:
+            with open_granule(str(path), group) as ds:
+                month = granule_month(ds, str(path))
+                # extract all before writing any; coarsen only entries that ask for it
+                arrays = {e["id"]: block_mean(extract(ds, e), e.get("coarsen", 1) or 1) for e in entries}
+            return month, arrays
+        except OSError as ex:
+            if not _access_denied(ex) or attempt == OPEN_RETRIES - 1:
+                raise
+            time.sleep(0.1 * 2 ** attempt)       # 0.1, 0.2, 0.4, 0.8, 1.6 s
 
 
 def download_to_cache(earthaccess, g, cache_dir):
@@ -251,6 +271,8 @@ def load_granule(earthaccess, g, cache_dir, group, entries):
             try:
                 return (*read_granule(cached, group, entries, g), False)
             except Exception as ex:
+                if _access_denied(ex):
+                    raise      # locked by another program, not corrupt: never delete it
                 print(f"  cached {name} unusable ({ex}); re-downloading")
                 try:
                     cached.unlink()
@@ -259,7 +281,9 @@ def load_granule(earthaccess, g, cache_dir, group, entries):
     path = download_to_cache(earthaccess, g, cache_dir)
     try:
         return (*read_granule(path, group, entries, g), True)
-    except Exception:
+    except Exception as ex:
+        if _access_denied(ex):
+            raise
         try:
             path.unlink()          # never leave a bad file in the cache
         except OSError:

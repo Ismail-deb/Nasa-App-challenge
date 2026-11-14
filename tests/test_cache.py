@@ -167,3 +167,32 @@ def test_cleanup_removes_only_this_categorys_cache(env):
     (other / "x.nc4").write_bytes(b"x")
     pull_data.cleanup_cache([T2M])
     assert not env.cache.exists() and other.exists()
+
+
+def test_transient_access_denied_is_retried_not_treated_as_corrupt(env, monkeypatch):
+    """Windows briefly denies opening a file being renamed by another process: retry, keep file."""
+    pull_data.pull_collection([T2M], "2001-01", None)
+    real_open, calls = pull_data.open_granule, {"n": 0}
+
+    def flaky_open(path, group):
+        calls["n"] += 1
+        if calls["n"] <= 2:                       # first two opens denied, then fine
+            raise OSError(13, "[Errno 13] Unable to synchronously open file")
+        return real_open(path, group)
+
+    monkeypatch.setattr(pull_data, "open_granule", flaky_open)
+    monkeypatch.setattr("time.sleep", lambda s: None)
+    before = len(env.fake.calls)
+    assert pull_data.pull_collection([T2M], "2001-01", None) == 0
+    assert len(env.fake.calls) == before                 # nothing re-downloaded
+    assert len(list(env.cache.glob("*.nc4"))) == N       # nothing deleted
+
+
+def test_persistent_access_denied_never_deletes_cached_file(env, monkeypatch):
+    pull_data.pull_collection([T2M], "2001-01", None)
+    monkeypatch.setattr(pull_data, "open_granule",
+                        lambda p, g: (_ for _ in ()).throw(PermissionError(13, "locked")))
+    monkeypatch.setattr("time.sleep", lambda s: None)
+    failed = pull_data.pull_collection([T2M], "2001-01", None)
+    assert failed == N                                   # reported as gaps...
+    assert len(list(env.cache.glob("*.nc4"))) == N       # ...but the good files are kept
