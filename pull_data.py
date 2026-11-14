@@ -163,7 +163,12 @@ class IncrementalWriter:
     def close(self):
         self.flush()
         self.f.close()
-        os.replace(self.tmp, self.path)      # atomic: readers see the old file or the new one
+        try:
+            os.replace(self.tmp, self.path)  # atomic: readers see the old file or the new one
+        except PermissionError:
+            raise SystemExit(
+                f"Cannot replace {self.path.name}: it is open in another program (is the app "
+                f"running?). The new data is complete in {self.tmp.name}; stop the app and re-run.")
         print(f"  wrote {self.path.name}  {self.n} months  {self.path.stat().st_size / 1e6:.0f} MB")
 
 
@@ -341,9 +346,9 @@ def cleanup_cache(entries):
     for sn in sorted({e["short_name"] for e in entries}):
         d = RAW_DIR / sn
         if d.exists():
-            size = sum(f.stat().st_size for f in d.rglob("*") if f.is_file()) / 1e9
+            size = sum(f.stat().st_size for f in d.rglob("*") if f.is_file()) / 1e6
             shutil.rmtree(d, ignore_errors=True)
-            print(f"cleanup: removed raw cache {d} ({size:.1f} GB)")
+            print(f"cleanup: removed raw cache {d} ({size:,.0f} MB)")
 
 
 def main(argv=None) -> int:

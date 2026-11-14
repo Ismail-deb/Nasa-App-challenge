@@ -56,10 +56,29 @@ python -m pytest                           # unit tests (offline)
 uvicorn app.main:app --reload              # then open http://127.0.0.1:8000
 ```
 
-`pull_data.py` downloads each monthly granule once (shared across variables of the same
-collection), extracts the needed variables, deletes the raw file, and writes the result
+`pull_data.py` extracts the needed variables from each monthly granule and writes the result
 incrementally (low RAM). Existing outputs are skipped; use `--force` to redo, `--start/--end`
-(YYYY-MM) to limit the period. `check_catalog.py` prints real variable names/units.
+(YYYY-MM) to limit the period. Exit code: 0 ok, 3 finished with gaps, 1 error.
+`check_catalog.py` prints real variable names/units.
+
+### Raw granule cache and resuming
+Raw granules are kept in `data/raw/<collection>/` (git-ignored), so `weather_climate` and
+`atmosphere_solar` share the MERRA-2 SLV downloads, and `hydrology` and `cryosphere` share GLDAS.
+If a run is stopped, just run the same command again: cached granules are reused and only the
+missing ones are downloaded. A cached file is trusted only if its size matches NASA's metadata and
+every needed variable reads cleanly; a partial or corrupted file is deleted and re-downloaded.
+`--cleanup` deletes the cache of the collections a category uses, after a run with no gaps.
+
+Disk space for the cache (2000-2026, approximate): MERRA-2 SLV 17 GB, RAD 12 GB, AER 19 GB,
+GLDAS 8 GB, IMERG 5 GB, about 60 GB if nothing is cleaned up.
+
+### Running two pulls at once
+`run_stream1.ps1` (MERRA-2 categories) and `run_stream2.ps1` (GLDAS/IMERG categories) can run at
+the same time in two terminals. Each category writes its own output files (a test checks that no
+two catalog entries share a file). All writes are atomic: downloads go to a private temp folder
+(`.dl-<pid>-<random>`) and processed files to `<name>.part-<pid>-<random>`, and each is renamed
+into place only when complete, so a reader never sees a half-written file and two runs never
+write the same temp file. Temp leftovers from a killed run are removed after 12 hours.
 
 ### Moving data between machines
 Pull on a fast machine, then publish the processed files as a GitHub Release (not in git history):
