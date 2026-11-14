@@ -16,16 +16,21 @@ def load_catalog() -> dict:
         return yaml.safe_load(f)
 
 
-def iter_entries(catalog: dict, category: str | None = None):
+def iter_entries(catalog: dict, category: str | None = None, include_planned: bool = False):
+    """Yield (category, entry). Planned entries (not yet pullable) are skipped by default."""
     for cat, body in catalog["categories"].items():
         if category and cat != category:
             continue
         for entry in body.get("variables", []):
+            if entry.get("status") == "planned" and not include_planned:
+                continue
             yield cat, entry
 
 
 def processed_path(entry: dict) -> Path:
-    return PROCESSED_DIR / f"{entry['short_name']}_{entry['variable']}.nc"
+    v = entry["variable"]
+    name = "+".join(v) if isinstance(v, list) else v
+    return PROCESSED_DIR / f"{entry['short_name']}_{name}.nc"
 
 
 def earthdata_login():

@@ -1,19 +1,158 @@
-# Variable catalog. Step 1 contains ONE verified-by-script candidate entry (T2M).
-# Run `python check_catalog.py` and correct these fields from its output.
+# Variable catalog. Run `python check_catalog.py` and correct fields from its output.
+# status: planned  -> not pullable yet (derived or other archive); hidden from the app.
+# variable: a name, or a list of names when `derive` combines them (e.g. wind speed).
 categories:
+  atmosphere_solar:
+    label: Atmosphere & solar
+    variables:
+      - id: M2TMNXAER/TOTEXTTAU
+        name: Aerosol optical depth
+        short_name: M2TMNXAER
+        version: "5.12.4"
+        variable: TOTEXTTAU
+        units: "1"
+        description: >
+          How much haze, dust, smoke and pollution particles in the air block sunlight.
+          0 is perfectly clear; higher numbers mean hazier skies.
+      - id: M2TMNXRAD/SWGDN
+        name: Sunlight reaching the ground
+        short_name: M2TMNXRAD
+        version: "5.12.4"
+        variable: SWGDN
+        units: W m-2
+        description: >
+          The average amount of sunlight energy hitting each square metre of the ground,
+          after clouds and haze have taken their share.
+      - id: M2TMNXRAD/CLDTOT
+        name: Cloud cover
+        short_name: M2TMNXRAD
+        version: "5.12.4"
+        variable: CLDTOT
+        units: "1"
+        description: The fraction of the sky covered by cloud (0 = clear, 1 = fully overcast).
+      - id: M2TMNXSLV/TQV
+        name: Total water vapour
+        short_name: M2TMNXSLV
+        version: "5.12.4"
+        variable: TQV
+        units: kg m-2
+        description: How much invisible water vapour is in the whole column of air above a spot.
+      - id: M2TMNXSLV/PS
+        name: Surface air pressure
+        short_name: M2TMNXSLV
+        version: "5.12.4"
+        variable: PS
+        units: Pa
+        description: The weight of the air pressing down on the ground at the surface.
   weather_climate:
     label: Weather & climate
     variables:
       - id: M2TMNXSLV/T2M
         name: Air temperature (2 m)
         short_name: M2TMNXSLV
-        version: "5.12.4"        # UNVERIFIED - check_catalog.py reports the real one
+        version: "5.12.4"
         variable: T2M
-        units: K                 # units stored in the file
-        display_units: degC      # units shown to users (converted in the API)
+        units: K
+        display_units: degC
         description: >
           How warm the air is about 2 metres (6 feet) above the ground, averaged over a month.
           It is the temperature a thermometer in a weather shelter would read.
         note: >
           MERRA-2 is a reanalysis: a weather model that continuously absorbs satellite and
           ground observations. Good for regional trends, but not a substitute for station records.
+      - id: M2TMNXSLV/WIND50M
+        name: Wind speed (50 m)
+        short_name: M2TMNXSLV
+        version: "5.12.4"
+        variable: [U50M, V50M]
+        derive: speed            # sqrt(U50M^2 + V50M^2)
+        units: m s-1
+        description: How fast the wind blows about 50 metres up, roughly the height of a wind-turbine hub.
+        note: Reanalysis wind is indicative only; it is not a measurement at a specific site.
+      - id: GPM_3IMERGDF/heavy_rain_days
+        name: Heavy-rain days per month
+        short_name: GPM_3IMERGDF
+        version: "07"
+        group: Grid
+        variable: precipitation
+        derive: heavy_rain_days
+        units: days
+        status: planned          # derived from ~9,000 daily files; decide threshold later
+        description: How many days in a month had heavy rain.
+  hydrology:
+    label: Water & hydrology
+    variables:
+      - id: GPM_3IMERGM/precipitation
+        name: Precipitation
+        short_name: GPM_3IMERGM
+        version: "07"
+        group: Grid              # IMERG HDF5 files keep data in the 'Grid' group
+        variable: precipitation
+        units: mm/hr
+        description: How much rain and snow fell, shown as an average rate over the month.
+      - id: GLDAS_NOAH025_M/SoilMoi0_10cm_inst
+        name: Soil moisture (top 10 cm)
+        short_name: GLDAS_NOAH025_M
+        version: "2.1"         # 2.1 covers 2000-present (2.0 stops 2014)
+        variable: SoilMoi0_10cm_inst
+        units: kg m-2
+        description: How much water is held in the top 10 cm of soil, where crop seedlings and grass roots live.
+        note: GLDAS is a land-surface model driven by observations, not a direct soil measurement.
+      - id: GLDAS_NOAH025_M/Qs_acc
+        name: Surface runoff (water-availability proxy)
+        short_name: GLDAS_NOAH025_M
+        version: "2.1"         # 2.1 covers 2000-present (2.0 stops 2014)
+        variable: Qs_acc
+        units: kg m-2
+        description: Rain or melt that flows over the ground surface instead of soaking in.
+        note: A proxy for water availability. It is NOT river flow.
+      - id: GLDAS_NOAH025_M/Evap_tavg
+        name: Evaporation
+        short_name: GLDAS_NOAH025_M
+        version: "2.1"         # 2.1 covers 2000-present (2.0 stops 2014)
+        variable: Evap_tavg
+        units: kg m-2 s-1
+        description: How fast water is returning to the air from soil, plants and water surfaces.
+      - id: GRACE/groundwater
+        name: Groundwater
+        status: planned          # TODO: GRACE, different archive
+        description: Water stored underground. Coming soon.
+  cryosphere:
+    label: Snow & ice
+    variables:
+      - id: GLDAS_NOAH025_M/Snowf_tavg
+        name: Snowfall rate
+        short_name: GLDAS_NOAH025_M
+        version: "2.1"         # 2.1 covers 2000-present (2.0 stops 2014)
+        variable: Snowf_tavg
+        units: kg m-2 s-1
+        description: How fast snow is falling, averaged over the month.
+      - id: GLDAS_NOAH025_M/SnowDepth_inst
+        name: Snow depth
+        short_name: GLDAS_NOAH025_M
+        version: "2.1"         # 2.1 covers 2000-present (2.0 stops 2014)
+        variable: SnowDepth_inst
+        units: m
+        description: How deep the snow lies on the ground.
+      - id: GLDAS_NOAH025_M/SWE_inst
+        name: Snow water equivalent
+        short_name: GLDAS_NOAH025_M
+        version: "2.1"         # 2.1 covers 2000-present (2.0 stops 2014)
+        variable: SWE_inst
+        units: kg m-2
+        description: How much water you would get if the snowpack melted.
+  ocean:
+    label: Ocean
+    variables:
+      - id: ocean/sst
+        name: Sea surface temperature
+        status: planned          # TODO: PO.DAAC
+        description: Coming soon.
+      - id: ocean/ssh
+        name: Sea surface height
+        status: planned          # TODO: PO.DAAC
+        description: Coming soon.
+      - id: ocean/color
+        name: Ocean colour (chlorophyll)
+        status: planned          # TODO: OB.DAAC
+        description: Coming soon.

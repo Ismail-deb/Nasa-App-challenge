@@ -39,7 +39,8 @@ def test_trend_endpoint(client):
 def test_errors_and_catalog(client):
     assert client.get("/trend", params={"variable": "nope", "bbox": "0,0,1,1"}).status_code == 404
     assert client.get("/trend", params={"variable": "M2TMNXSLV/T2M", "bbox": "0,10,1,5"}).status_code == 400
-    assert client.get("/variables").json()[0]["has_data"] is True
+    t2m = [v for v in client.get("/variables").json() if v["id"] == "M2TMNXSLV/T2M"][0]
+    assert t2m["has_data"] is True
     assert client.get("/categories").status_code == 200
 
 
