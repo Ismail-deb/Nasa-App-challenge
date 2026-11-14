@@ -1,4 +1,7 @@
-data/
+# data: ignore everything (multi-GB) EXCEPT the small precomputed preset series
+data/*
+!data/series/
+data/series/*.part-*
 .env
 .netrc
 _netrc
