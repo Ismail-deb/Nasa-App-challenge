@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Earth System Trend Detective</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/plotly.js/2.35.2/plotly.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js"></script>
 <style>
   body { font-family: system-ui, sans-serif; margin: 0; background: #f5f7fa; color: #1b2733; }
   header { background: #0b3d91; color: #fff; padding: 14px 20px; }
@@ -105,7 +105,7 @@ function demo(p) {
     $('variable').value = p.variables[0];
     showDesc();
   }
-  run();
+  run().catch(e => $('err').textContent = 'Something went wrong: ' + e.message);
 }
 
 async function run() {
@@ -118,11 +118,15 @@ async function run() {
   try { d = await api('/trend?' + q); } catch (e) { $('err').textContent = e.message; return; }
 
   const label = d.deseasonalized ? ' (seasonal cycle removed for the test; chart shows raw values)' : '';
-  Plotly.newPlot('chart', [
-    {x: d.dates, y: d.values, mode: 'lines', name: 'Monthly regional mean', line: {color: '#6b8fc7', width: 1.5}},
-    {x: d.dates, y: d.fitted, mode: 'lines', name: 'Trend (Sen\'s slope)', line: {color: '#d9480f', width: 3}},
-  ], {title: d.name, yaxis: {title: d.units}, margin: {t: 40, r: 10}, legend: {orientation: 'h', y: -0.15}},
-  {responsive: true});
+  if (window.Plotly) {
+    Plotly.newPlot('chart', [
+      {x: d.dates, y: d.values, mode: 'lines', name: 'Monthly regional mean', line: {color: '#6b8fc7', width: 1.5}},
+      {x: d.dates, y: d.fitted, mode: 'lines', name: 'Trend (Sen\'s slope)', line: {color: '#d9480f', width: 3}},
+    ], {title: d.name, yaxis: {title: d.units}, margin: {t: 40, r: 10}, legend: {orientation: 'h', y: -0.15}},
+    {responsive: true});
+  } else {
+    $('err').textContent = 'The chart library could not be loaded (check the internet connection); results are shown below.';
+  }
 
   const sign = x => (x > 0 ? '+' : '') + x.toFixed(2);
   $('cardTitle').textContent = `${d.name}: ${d.trend}`;
@@ -139,7 +143,7 @@ async function run() {
   $('card').classList.remove('hidden');
 }
 
-$('go').onclick = run;
+$('go').onclick = () => run().catch(e => $('err').textContent = 'Something went wrong: ' + e.message);
 init().catch(e => $('err').textContent = e.message);
 </script>
 </body>
