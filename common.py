@@ -9,6 +9,7 @@ ROOT = Path(__file__).parent
 NC_ENGINE = "h5netcdf"
 RAW_DIR = ROOT / "data" / "raw"
 PROCESSED_DIR = ROOT / "data" / "processed"
+SERIES_DIR = ROOT / "data" / "series"     # small precomputed preset series, committed to git
 
 
 def load_catalog() -> dict:
