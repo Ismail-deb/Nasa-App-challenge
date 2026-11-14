@@ -1,13 +1,15 @@
 """FastAPI backend. Reads pre-processed files only - never calls NASA."""
 from pathlib import Path
 
+import math
+
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 import common
 import stats
-from app import data
+from app import data, presets
 
 WEB = Path(__file__).resolve().parent.parent / "web"
 app = FastAPI(title="Earth System Trend Detective")
@@ -31,38 +33,81 @@ def categories():
             for k, v in cats.items()]
 
 
+def _preset_regions_with_series(entry: dict) -> list:
+    return [pid for pid in presets.load_presets() if presets.series_path(entry, pid).exists()]
+
+
 @app.get("/variables")
 def variables(category: str | None = None):
-    return [{"id": e["id"], "category": c, "name": e["name"],
-             "description": _clean(e["description"]), "note": _clean(e.get("note")),
-             "units": data.display_units(e), "has_data": common.processed_path(e).exists()}
-            for c, e in common.iter_entries(common.load_catalog(), category)]
+    out = []
+    for c, e in common.iter_entries(common.load_catalog(), category):
+        gridded, regions = common.processed_path(e).exists(), _preset_regions_with_series(e)
+        out.append({"id": e["id"], "category": c, "name": e["name"],
+                    "description": _clean(e["description"]), "note": _clean(e.get("note")),
+                    "units": data.display_units(e), "has_data": gridded or bool(regions),
+                    "gridded": gridded, "presets_available": regions})
+    return out
+
+
+@app.get("/presets")
+def list_presets():
+    """Preset demo regions, their recommended lens, and which variables are ready for each."""
+    entries = [e for _, e in common.iter_entries(common.load_catalog())]
+    return [{"id": pid, "name": p["name"], "bbox": p["bbox"], "lens": p["lens"], "why": p.get("why"),
+             "variables": [e["id"] for e in entries if presets.series_path(e, pid).exists()]}
+            for pid, p in presets.load_presets().items()]
 
 
 def _series(variable, bbox, start, end):
+    """Monthly regional series in display units. Returns (entry, series, source, region).
+
+    1. bbox matches a preset (within presets.BBOX_TOLERANCE) and its series file exists
+       -> precomputed series from data/series/   (source = "preset_series")
+    2. else the gridded file exists -> cos(lat)-weighted regional mean (source = "gridded")
+    3. else a friendly 404.
+    """
     entry = _entry(variable)
     try:
-        ser = data.regional_mean(entry, data.parse_bbox(bbox), start, end)
-    except FileNotFoundError as ex:
-        raise HTTPException(503, str(ex))
+        box = data.parse_bbox(bbox)
     except ValueError as ex:
         raise HTTPException(400, str(ex))
-    return entry, ser
+    region = presets.match_preset(box)
+    ser = presets.load_series(entry, region) if region else None
+    if ser is not None:
+        ser = ser.loc[start:end] if (start or end) else ser
+        if ser.empty:
+            raise HTTPException(400, "No data in the requested period.")
+        return entry, ser, "preset_series", region
+    try:
+        return entry, data.regional_mean(entry, box, start, end), "gridded", region
+    except FileNotFoundError:
+        ready = _preset_regions_with_series(entry)
+        hint = ", ".join(ready) if ready else "none for this variable yet"
+        raise HTTPException(404, f"Region/variable not available yet, try a preset. "
+                                 f"{entry['name']} is ready for: {hint}.")
+    except ValueError as ex:
+        raise HTTPException(400, str(ex))
+
+
+def _values(ser) -> list:
+    """Rounded values with NaN as null (NaN is not valid JSON)."""
+    return [None if (v is None or math.isnan(v)) else round(float(v), 4) for v in ser.tolist()]
 
 
 @app.get("/timeseries")
 def timeseries(variable: str, bbox: str, start: str | None = None, end: str | None = None):
     """bbox = west,south,east,north ; start/end = YYYY-MM"""
-    entry, ser = _series(variable, bbox, start, end)
+    entry, ser, source, region = _series(variable, bbox, start, end)
     return {"variable": variable, "units": data.display_units(entry),
-            "dates": [d.strftime("%Y-%m") for d in ser.index], "values": ser.round(4).tolist()}
+            "dates": [d.strftime("%Y-%m") for d in ser.index], "values": _values(ser),
+            "source": source, "region": region}
 
 
 @app.get("/trend")
 def trend(variable: str, bbox: str, start: str | None = None, end: str | None = None,
           deseasonalize: bool = True, method: str = "corrected"):
     """method = corrected (autocorrelation-corrected Mann-Kendall, default) or plain."""
-    entry, ser = _series(variable, bbox, start, end)
+    entry, ser, source, region = _series(variable, bbox, start, end)
     try:
         r = stats.analyze(ser, deseasonalize=deseasonalize, method=method)
     except ValueError as ex:
@@ -71,11 +116,13 @@ def trend(variable: str, bbox: str, start: str | None = None, end: str | None = 
     return {
         "variable": variable, "name": entry["name"], "units": data.display_units(entry),
         "description": _clean(entry["description"]), "note": _clean(entry.get("note")),
-        "dates": [d.strftime("%Y-%m") for d in ser.index], "values": ser.round(4).tolist(),
-        "fitted": fitted.round(4).tolist(),
+        "dates": [d.strftime("%Y-%m") for d in ser.index], "values": _values(ser),
+        "fitted": _values(fitted.reindex(ser.index)),   # same length as values; gaps -> null
         **{k: (round(v, 5) if isinstance(v, float) else v) for k, v in r.items()},
         "verdict": stats.verdict(r["significant"]),
         "lens_message": None,   # lenses arrive after Step 1 is confirmed
+        "source": source,       # "preset_series" (data/series/) or "gridded" (data/processed/)
+        "region": region,       # preset id when the bbox matches one, else null
     }
 
 

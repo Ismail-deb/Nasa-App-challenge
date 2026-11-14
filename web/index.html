@@ -40,17 +40,17 @@
   <section class="panel">
     <div class="row">
       <label>Variable <select id="variable"></select></label>
-      <label>West <input type="number" id="w" step="0.5" value="-115"></label>
-      <label>South <input type="number" id="s" step="0.5" value="31"></label>
+      <label>West <input type="number" id="w" step="0.5" value="-117"></label>
+      <label>South <input type="number" id="s" step="0.5" value="31.3"></label>
       <label>East <input type="number" id="e" step="0.5" value="-109"></label>
-      <label>North <input type="number" id="n" step="0.5" value="37"></label>
+      <label>North <input type="number" id="n" step="0.5" value="38"></label>
       <label>Start <input type="month" id="start" value="2000-01"></label>
       <label>End <input type="month" id="end"></label>
       <label style="grid-auto-flow:column;align-items:center"><input type="checkbox" id="deseason" checked> Remove seasonal cycle</label>
     </div>
     <div class="row" style="margin-top:12px">
       <button id="go">Show trend</button>
-      <button class="secondary" id="demo">Demo: US Southwest (AZ/NV)</button>
+      <span id="demos"></span>
     </div>
     <p id="desc"></p><p id="note"></p>
     <p id="err"></p>
@@ -92,10 +92,19 @@ async function init() {
   $('variable').innerHTML = vars.map(v => `<option value="${v.id}">${v.name} (${v.units})${v.has_data ? '' : ' – no data pulled yet'}</option>`).join('');
   $('variable').onchange = showDesc;
   showDesc();
+  const presets = await api('/presets');
+  $('demos').innerHTML = presets.map(p =>
+    `<button class="secondary" data-id="${p.id}" title="${p.why || ''}">Demo: ${p.name} (${p.lens})</button>`).join(' ');
+  $('demos').querySelectorAll('button').forEach(b => b.onclick = () => demo(presets.find(p => p.id === b.dataset.id)));
 }
 
-function demo() {
-  $('w').value = -115; $('s').value = 31; $('e').value = -109; $('n').value = 37;
+function demo(p) {
+  [$('w').value, $('s').value, $('e').value, $('n').value] = p.bbox;
+  // pick a variable that is ready for this preset, keeping the current one if it is
+  if (p.variables.length && !p.variables.includes($('variable').value)) {
+    $('variable').value = p.variables[0];
+    showDesc();
+  }
   run();
 }
 
@@ -131,7 +140,6 @@ async function run() {
 }
 
 $('go').onclick = run;
-$('demo').onclick = demo;
 init().catch(e => $('err').textContent = e.message);
 </script>
 </body>

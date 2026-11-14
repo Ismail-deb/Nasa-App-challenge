@@ -12,6 +12,7 @@ from app import data
 @pytest.fixture()
 def client(tmp_path, monkeypatch):
     monkeypatch.setattr(common, "PROCESSED_DIR", tmp_path)
+    monkeypatch.setattr(common, "SERIES_DIR", tmp_path / "no-series")   # isolate from committed series
     t = pd.date_range("2000-01-01", periods=240, freq="MS")
     lat = np.arange(-90, 90.5, 0.5)
     lon = np.arange(-180, 180, 0.625)
