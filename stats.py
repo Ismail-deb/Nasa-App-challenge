@@ -103,4 +103,4 @@ def analyze(series: pd.Series, deseasonalize: bool = False, alpha: float = ALPHA
 
 def verdict(significant: bool) -> str:
     return ("Significant" if significant
-            else "Not significant yet - a longer record may reveal a trend")
+            else "Not significant yet; a longer record may reveal a trend")

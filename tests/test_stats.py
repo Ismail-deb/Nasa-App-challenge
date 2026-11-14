@@ -128,3 +128,9 @@ def test_unknown_method_rejected():
         analyze(make(), method="magic")
     with pytest.raises(ValueError):
         mann_kendall_p(np.arange(20.0), method="magic")
+
+
+def test_verdict_messages():
+    from stats import verdict
+    assert verdict(True) == "Significant"
+    assert verdict(False) == "Not significant yet; a longer record may reveal a trend"

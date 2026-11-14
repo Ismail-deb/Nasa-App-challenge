@@ -59,3 +59,19 @@ def test_trend_method_parameter_and_added_fields(client):
     assert default["slope_per_decade"] == plain["slope_per_decade"]
     assert set(plain) == set(default)                            # same response shape
     assert client.get("/trend", params={**q, "method": "magic"}).status_code == 400
+
+
+def test_non_significant_result_message_and_record_length(client, tmp_path):
+    """A flat series: verdict says 'not significant yet...' and the record length is reported."""
+    import pandas as pd, xarray as xr, numpy as np
+    t = pd.date_range("2000-01-01", periods=120, freq="MS")
+    rng = np.random.default_rng(3)
+    arr = (285 + rng.normal(0, 1, 120))[:, None, None] * np.ones((120, 4, 4))
+    xr.DataArray(arr.astype("float32"), coords={"time": t, "lat": [30.0, 31, 32, 33], "lon": [-112.0, -111, -110, -109]},
+                 dims=("time", "lat", "lon"), name="T2M").to_dataset().to_netcdf(
+        tmp_path / "M2TMNXSLV_T2M.nc", engine="h5netcdf")
+    data._open.cache_clear()
+    j = client.get("/trend", params={"variable": "M2TMNXSLV/T2M", "bbox": "-112,30,-109,33"}).json()
+    assert j["significant"] is False
+    assert j["verdict"] == "Not significant yet; a longer record may reveal a trend"
+    assert j["record_years"] == 10.0 and j["method"] == "corrected"

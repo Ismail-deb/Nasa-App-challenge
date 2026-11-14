@@ -124,7 +124,8 @@ async function run() {
   $('p').textContent = d.p_value < 0.001 ? '< 0.001' : d.p_value.toFixed(3);
   $('len').textContent = `${d.record_years.toFixed(1)} years`;
   $('plain').textContent = `Over ${d.record_years.toFixed(1)} years, the fitted change is ${sign(d.slope_per_decade)} ${d.units} per decade. ` +
-    `Significant means a trend this large would be unlikely (p < 0.05) if there were only random variation.` + label;
+    `Significant means a trend this large would be unlikely (p < 0.05) if there were only random variation.` + label +
+    (d.method === 'corrected' ? ' The test allows for month-to-month persistence in the data.' : ' Plain test: assumes every month is independent.');
   $('card').classList.remove('hidden');
 }
 
