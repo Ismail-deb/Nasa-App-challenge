@@ -101,6 +101,24 @@ def test_explanations():
     assert "+0.55 mm/month per decade (+2.6% of the average)" in no
 
 
+@pytest.mark.parametrize("x, text", [
+    (2.6218, "+2.6%"), (-8.07, "-8.1%"), (12.91, "+12.9%"), (0.8, "+0.8%"), (0.1, "+0.1%"),
+    (-0.0059, "-0.0059%"), (0.00004, "about 0"), (0.0, "0%"),
+])
+def test_fmt_percent_one_decimal(x, text):
+    assert display.fmt_percent(x) == text
+
+
+def test_evaporation_and_snowfall_shown_in_mm_per_day():
+    evap = {"id": "GLDAS_NOAH025_M/Evap_tavg", "name": "Evaporation", "units": "kg m-2 s-1", "card_units": "mm/day"}
+    s = pd.Series([1e-5, 3e-5], index=pd.date_range("2001-01-01", periods=2, freq="MS"))
+    # 1e-5 kg/m2/s = 1e-5 mm/s of water; x 86400 s/day = 0.864 mm/day (same for every month)
+    assert np.allclose(display.convert_values(evap, s, "kg m-2 s-1").values, [0.864, 2.592])
+    assert display.slope_factor(evap) == 86400.0
+    with pytest.raises(ValueError):
+        display.convert_values({**evap, "units": "mm/hr"}, s)
+
+
 def test_unit_labels():
     cat = {e["id"]: e for _, e in common.iter_entries(common.load_catalog())}
     assert display.unit_label(cat["M2TMNXSLV/T2M"]) == "°C"
@@ -110,6 +128,8 @@ def test_unit_labels():
     assert display.unit_label(cat["M2TMNXAER/TOTEXTTAU"]) == "unitless"
     assert display.unit_label(cat["M2TMNXRAD/CLDTOT"]) == "fraction (0 to 1)"
     assert display.unit_label(cat["M2TMNXRAD/SWGDN"]) == "W/m²"
+    assert display.unit_label(cat["GLDAS_NOAH025_M/Evap_tavg"]) == "mm/day"
+    assert display.unit_label(cat["GLDAS_NOAH025_M/Snowf_tavg"]) == "mm/day"
     for e in cat.values():                                   # no raw unit strings left anywhere
         assert display.unit_label(e) not in ("1", "kg m-2", "m s-1", "W m-2", "degC")
 

@@ -21,6 +21,7 @@ UNIT_LABELS = {
     "1": "unitless",
     "mm/hr": "mm/hr",
     "mm/month": "mm/month",
+    "mm/day": "mm/day",
 }
 
 
@@ -34,29 +35,44 @@ def unit_label(entry: dict) -> str:
 
 # ---------------------------------------------------------------- conversions
 
-def _check_mm_per_hour(entry, series_units):
-    if entry["units"] != "mm/hr" or series_units not in (None, "mm/hr"):
-        raise ValueError(f"{entry['id']}: expected stored units mm/hr for the mm/month display, "
-                         f"got file units {entry['units']!r}, series units {series_units!r}")
+SECONDS_PER_DAY = 86400
+
+# card_units -> the stored unit it must come from. Anything else is refused, never guessed.
+CARD_SOURCE_UNITS = {
+    "mm/month": "mm/hr",          # IMERG monthly mean rate
+    "mm/day": "kg m-2 s-1",       # GLDAS mean flux; 1 kg/m2 of water = 1 mm
+}
+
+
+def _check_source_units(entry, series_units):
+    need = CARD_SOURCE_UNITS[entry["card_units"]]
+    if entry["units"] != need or series_units not in (None, need):
+        raise ValueError(f"{entry['id']}: expected stored units {need} for the {entry['card_units']} "
+                         f"display, got file units {entry['units']!r}, series units {series_units!r}")
 
 
 def convert_values(entry: dict, ser: pd.Series, series_units: str | None = None) -> pd.Series:
-    """Monthly series values in display units. Precipitation (IMERG mean rate, mm/hr) becomes
-    mm/month: rate x 24 x days in that calendar month."""
-    if entry.get("card_units") == "mm/month":
-        _check_mm_per_hour(entry, series_units)
+    """Monthly series values in display units.
+    mm/month: IMERG mean rate (mm/hr) x 24 x days in that calendar month.
+    mm/day:   GLDAS mean flux (kg m-2 s-1 = mm/s of water) x 86400."""
+    card = entry.get("card_units")
+    if card not in CARD_SOURCE_UNITS:
+        return ser
+    _check_source_units(entry, series_units)
+    if card == "mm/month":
         return ser * 24 * ser.index.days_in_month
-    return ser
+    return ser * SECONDS_PER_DAY
 
 
 def slope_factor(entry: dict, series_units: str | None = None) -> float:
     """Factor turning a slope (or range end, or fitted value) from stored units into display
     units. One constant for every month, so slope, both range ends and the fitted line convert
     the same way and the significance test is untouched (mm/hr -> mm per average month)."""
-    if entry.get("card_units") == "mm/month":
-        _check_mm_per_hour(entry, series_units)
-        return HOURS_PER_MEAN_MONTH
-    return 1.0
+    card = entry.get("card_units")
+    if card not in CARD_SOURCE_UNITS:
+        return 1.0
+    _check_source_units(entry, series_units)
+    return HOURS_PER_MEAN_MONTH if card == "mm/month" else float(SECONDS_PER_DAY)
 
 
 # ---------------------------------------------------------------- formatting
@@ -79,6 +95,14 @@ def fmt_signed(x: float) -> str:
     if "." in s:
         s = s.rstrip("0").rstrip(".")
     return f"{sign}{s}"
+
+
+def fmt_percent(x: float) -> str:
+    """Signed percent: 1 decimal from 0.1 upwards (e.g. '+2.6%'), smaller values like fmt_signed."""
+    if x is not None and not (isinstance(x, float) and math.isnan(x)) and abs(x) >= 0.1:
+        return f"{'+' if x > 0 else '-'}{abs(x):.1f}%"
+    s = fmt_signed(x)
+    return s if s in ("about 0", "n/a") else f"{s}%"
 
 
 def fmt_range(lo: float, hi: float) -> str:
@@ -140,8 +164,8 @@ def present(entry: dict, ser: pd.Series, fitted: pd.Series, r: dict, region_name
 
     out["slope_text"] = fmt_signed(out["slope_per_decade"])
     out["range_text"] = fmt_range(out["ci_low_per_decade"], out["ci_high_per_decade"])
-    out["percent_text"] = f"{fmt_signed(out['percent_per_decade'])}%" if pct else None
-    out["percent_range_text"] = (f"{fmt_signed(out['ci_low_percent'])}% to {fmt_signed(out['ci_high_percent'])}%"
+    out["percent_text"] = fmt_percent(out["percent_per_decade"]) if pct else None
+    out["percent_range_text"] = (f"{fmt_percent(out['ci_low_percent'])} to {fmt_percent(out['ci_high_percent'])}"
                                  if pct else None)
     out["headline"] = headline(entry["name"], r["significant"], r["trend"], region_name)
     out["explanation"] = explanation(r["significant"], r["record_years"], out["slope_text"], out["units"],

@@ -125,6 +125,7 @@ categories:
         version: "2.1"         # 2.1 covers 2000-present (2.0 stops 2014)
         variable: Evap_tavg
         units: kg m-2 s-1
+        card_units: mm/day          # display only: x 86400 (1 kg/m2 of water = 1 mm)
         description: How fast water is returning to the air from soil, plants and water surfaces.
       - id: GRACE/groundwater
         name: Groundwater
@@ -139,6 +140,7 @@ categories:
         version: "2.1"         # 2.1 covers 2000-present (2.0 stops 2014)
         variable: Snowf_tavg
         units: kg m-2 s-1
+        card_units: mm/day          # display only: x 86400, as water equivalent
         description: How fast snow is falling, averaged over the month.
       - id: GLDAS_NOAH025_M/SnowDepth_inst
         name: Snow depth

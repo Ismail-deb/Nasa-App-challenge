@@ -91,7 +91,7 @@ function showDesc() {
 
 async function init() {
   vars = await api('/variables');
-  $('variable').innerHTML = vars.map(v => `<option value="${v.id}">${v.name} (${v.units})${v.has_data ? '' : ' – no data pulled yet'}</option>`).join('');
+  $('variable').innerHTML = vars.map(v => `<option value="${v.id}">${v.name} – ${v.units}${v.has_data ? '' : ' (no data yet)'}</option>`).join('');
   $('variable').onchange = showDesc;
   showDesc();
   const presets = await api('/presets');
