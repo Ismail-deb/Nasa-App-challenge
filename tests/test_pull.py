@@ -52,3 +52,52 @@ def test_granule_month_and_incremental_writer(tmp_path, monkeypatch):
     assert out["T2M"].dims == ("time", "lat", "lon") and out.sizes["time"] == 13
     assert out["time"].dt.strftime("%Y-%m").values[[0, 12]].tolist() == ["2001-01", "2002-01"]
     assert out["T2M"].isel(time=7).values[1, 1] == 7 and out["T2M"].attrs["units"] == "K"
+
+
+def _grid(values, lat0=-0.4, lon0=10.05, step=0.1):
+    values = np.asarray(values, dtype="float32")
+    ny, nx = values.shape
+    return xr.DataArray(values, dims=("lat", "lon"),
+                        coords={"lat": lat0 + step * np.arange(ny), "lon": lon0 + step * np.arange(nx)})
+
+
+def test_block_mean_values_and_coords():
+    # 4x6 grid, factor 2 -> 2x3. Each 2x2 block mean checked by hand.
+    a = np.arange(24, dtype="float32").reshape(4, 6)
+    out = pull_data.block_mean(_grid(a), 2)
+    assert out.shape == (2, 3) and out.dtype == np.float32
+    assert out.values[0, 0] == (0 + 1 + 6 + 7) / 4
+    assert out.values[1, 2] == (16 + 17 + 22 + 23) / 4
+    assert np.allclose(out["lat"], [-0.35, -0.15]) and np.allclose(out["lon"], [10.1, 10.3, 10.5])
+
+
+def test_block_mean_nan_handling():
+    a = np.ones((4, 4), dtype="float32") * 2
+    a[0, 0] = np.nan                       # partly-NaN block: mean of the 3 valid cells
+    a[0, 1] = 8
+    a[2:4, 2:4] = np.nan                   # all-NaN block stays NaN
+    out = pull_data.block_mean(_grid(a), 2).values
+    assert out[0, 0] == (8 + 2 + 2) / 3
+    assert np.isnan(out[1, 1])
+    assert out[0, 1] == 2 and out[1, 0] == 2
+
+
+def test_block_mean_factor5_imerg_shape_and_identity():
+    a = np.random.default_rng(0).random((10, 20)).astype("float32")
+    g = _grid(a, lat0=-89.95, lon0=-179.95)
+    out = pull_data.block_mean(g, 5)
+    assert out.shape == (2, 4)
+    assert np.isclose(out.values[1, 3], a[5:10, 15:20].mean())
+    assert np.isclose(float(out["lat"][0]), -89.75)          # 0.5 degree cell centre
+    assert pull_data.block_mean(g, 1) is g                    # factor 1 = untouched
+
+
+def test_only_imerg_opts_into_coarsening():
+    entries = [e for _, e in common.iter_entries(common.load_catalog())]
+    coarse = {e["id"] for e in entries if "coarsen" in e}
+    assert coarse == {"GPM_3IMERGM/precipitation"}
+
+
+def test_projected_size_report():
+    r = pull_data.projected_size_report(309, 5)
+    assert "TOO BIG" in r.splitlines()[1] and "fits" in r.splitlines()[2]

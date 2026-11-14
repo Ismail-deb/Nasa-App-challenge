@@ -1,11 +1,15 @@
 """Download monthly granules for one category and write processed NetCDF files (native resolution).
 
     python pull_data.py weather_climate [--start 2000-01] [--end 2024-12] [--keep-raw] [--force]
+    python pull_data.py hydrology --coarsen 5      # IMERG block factor (default from catalog)
+    python pull_data.py hydrology --native         # IMERG at native 0.1 degrees (large file)
 
 - Entries that share a NASA collection (e.g. all MERRA-2 SLV variables) are served by ONE
   download of each granule; every needed variable is extracted from it.
 - Each raw granule is deleted after extraction (unless --keep-raw).
-- No resampling: grids stay at the dataset's native resolution. Missing values -> NaN.
+- MERRA-2 and GLDAS keep their native grids. Entries with `coarsen: N` in catalog.yml (IMERG,
+  0.1 degrees) are block-averaged NxN (NaN-aware) BEFORE writing; default N=5 gives 0.5 degrees.
+  Missing values -> NaN.
 - Output: data/processed/<short>_<var>.nc, float32, dims (time, lat, lon), gzip-compressed,
   tiled 90x90 in space and 12 months in time. Written incrementally, so RAM use stays small.
 - Existing outputs are skipped unless --force.
@@ -22,6 +26,42 @@ import xarray as xr
 from common import NC_ENGINE, PROCESSED_DIR, RAW_DIR, earthdata_login, iter_entries, load_catalog, processed_path
 
 FILL_LIMIT = 1e15   # safety net: anything this large is a fill value, not data
+IMERG_NATIVE_MB_PER_MONTH = 12.0   # measured: 12-month native-resolution test pull = 144 MB
+RELEASE_LIMIT_MB = 2 * 1024        # GitHub Release: each file must be under 2 GiB
+
+
+def block_mean(da: xr.DataArray, factor: int) -> xr.DataArray:
+    """NaN-aware factor x factor block mean of a (lat, lon) array.
+
+    Each output cell is the mean of the valid (non-NaN) native cells in its block; a block
+    that is entirely NaN stays NaN. Coordinates become block centres (mean of native centres).
+    Rows/columns that do not fill a whole block are trimmed (none for IMERG with factor 5).
+    """
+    if factor <= 1:
+        return da
+    ny, nx = da.sizes["lat"] // factor * factor, da.sizes["lon"] // factor * factor
+    a = da.values[:ny, :nx].reshape(ny // factor, factor, nx // factor, factor)
+    valid = ~np.isnan(a)
+    total = np.where(valid, a, 0).sum(axis=(1, 3), dtype="f8")
+    count = valid.sum(axis=(1, 3))
+    out = np.full(total.shape, np.nan, dtype="f4")
+    np.divide(total, count, out=out, where=count > 0, casting="unsafe")
+    lat = da["lat"].values[:ny].reshape(-1, factor).mean(axis=1)
+    lon = da["lon"].values[:nx].reshape(-1, factor).mean(axis=1)
+    return xr.DataArray(out, coords={"lat": lat, "lon": lon}, dims=("lat", "lon"), name=da.name)
+
+
+def projected_size_report(n_months: int, factor: int) -> str:
+    """Projected IMERG output size (from the measured native size) vs the Release limit."""
+    native = n_months * IMERG_NATIVE_MB_PER_MONTH
+    coarse = native / factor ** 2
+    fits = lambda mb: "fits" if mb < RELEASE_LIMIT_MB else "TOO BIG"
+    lines = [f"  projected IMERG size for {n_months} months (limit {RELEASE_LIMIT_MB} MB per Release file):",
+             f"    native 0.1 deg : ~{native:,.0f} MB  [{fits(native)}]"]
+    if factor > 1:
+        lines.append(f"    {factor}x{factor} block mean ({0.1 * factor:g} deg): ~{coarse:,.0f} MB  [{fits(coarse)}]"
+                     "  (estimate; compression varies)")
+    return "\n".join(lines)
 
 
 def open_granule(path: str, group: str | None) -> xr.Dataset:
@@ -80,6 +120,9 @@ class IncrementalWriter:
             compression="gzip", compression_opts=4, shuffle=True)
         self.var.attrs.update(units=entry["units"], catalog_id=entry["id"],
                               source=f"NASA {entry['short_name']} v{entry.get('version', '?')}")
+        f = entry.get("coarsen", 1) or 1
+        if f > 1:
+            self.var.attrs["resampling"] = f"NaN-aware {f}x{f} block mean of the native grid"
         self.times = []
 
     def add(self, month: pd.Timestamp, da: xr.DataArray):
@@ -118,6 +161,8 @@ def pull_collection(entries: list, start: str, end: str | None, keep_raw: bool):
     if not results:
         raise SystemExit(f"No granules for {sn} {temporal}. Run check_catalog.py.")
     print(f"{sn}: {len(results)} monthly granules -> {[e['id'] for e in entries]}")
+    if "coarsen" in first:
+        print(projected_size_report(len(results), first["coarsen"] or 1))
 
     raw = RAW_DIR / sn
     raw.mkdir(parents=True, exist_ok=True)
@@ -131,7 +176,9 @@ def pull_collection(entries: list, start: str, end: str | None, keep_raw: bool):
                 m = granule_month(ds, files[0])
                 if last is not None and m <= last:
                     raise RuntimeError(f"granule out of order ({m:%Y-%m})")
-                arrays = {e["id"]: extract(ds, e) for e in entries}   # extract all before writing any
+                # extract all before writing any; coarsen only entries that ask for it
+                arrays = {e["id"]: block_mean(extract(ds, e), e.get("coarsen", 1) or 1)
+                          for e in entries}
         except Exception as ex:
             failed += 1
             print(f"  granule {i} skipped: {ex}")
@@ -166,9 +213,15 @@ def main():
     ap.add_argument("--end", default=None, help="YYYY-MM (default: latest)")
     ap.add_argument("--keep-raw", action="store_true")
     ap.add_argument("--force", action="store_true", help="re-pull even if the output exists")
+    ap.add_argument("--coarsen", type=int, default=None,
+                    help="block factor for entries that have `coarsen` in catalog.yml (IMERG)")
+    ap.add_argument("--native", action="store_true", help="disable coarsening (factor 1)")
     args = ap.parse_args()
 
     entries = [e for _, e in iter_entries(load_catalog(), args.category)]
+    for e in entries:                      # only entries that opt in are ever coarsened
+        if "coarsen" in e:
+            e["coarsen"] = 1 if args.native else (args.coarsen or e["coarsen"])
     if not entries:
         raise SystemExit(f"No pullable entries for category {args.category!r}")
     todo = [e for e in entries if args.force or not processed_path(e).exists()]

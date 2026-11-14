@@ -87,6 +87,7 @@ categories:
         short_name: GPM_3IMERGM
         version: "07"
         group: Grid              # IMERG HDF5 files keep data in the 'Grid' group
+        coarsen: 5               # 0.1 -> 0.5 deg block mean (pull_data.py --native to disable)
         variable: precipitation
         units: mm/hr
         description: How much rain and snow fell, shown as an average rate over the month.

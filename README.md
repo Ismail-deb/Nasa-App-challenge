@@ -26,7 +26,28 @@ Credentials are never stored in this repo (`.env`, `.netrc` are git-ignored).
 ## Data workflow
 
 The running app never calls NASA. It reads pre-processed files in `data/processed/` (git-ignored).
-Data is kept at **native resolution** (no resampling).
+MERRA-2 and GLDAS are kept at **native resolution**. IMERG precipitation is the one exception (below).
+
+### IMERG coarsening (0.1° → 0.5°)
+At native 0.1° the full IMERG record (~309 months) would be ~3.7 GB, over GitHub's 2 GB
+per-file Release limit. `pull_data.py` therefore block-averages IMERG 5×5 cells into 0.5° cells
+before writing (~150 MB). The mean is NaN-aware: a block keeps the mean of its valid cells and
+stays NaN only if all 25 cells are missing. Use `--native` to keep 0.1°, or `--coarsen N` to change it.
+
+Effect on regional means, measured on two real IMERG months (Jan and Jul 2023), boxes whose edges
+do not line up with the 0.5° grid:
+
+| Box size | Difference vs native 0.1° |
+|---|---|
+| Large (e.g. Great Plains, ~12°×12°) | 0.1–0.5% |
+| State-sized (~5°×5°, e.g. US Southwest, Central Valley) | 0.2–6% |
+| 1°×1° | 6–11% |
+| 0.4°×0.4° (smaller than one 0.5° cell) | 13–34% |
+
+So regional means are barely affected for the region sizes this app is designed for, but IMERG
+results for boxes of about 1° or smaller should be treated with caution. The difference comes from
+box edges cutting through 0.5° cells; it is largely the same every month, so trends are expected
+to be affected less than absolute values (not yet measured).
 
 ```
 python check_catalog.py                    # verify catalog.yml against NASA (needs credentials)
