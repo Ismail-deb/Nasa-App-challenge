@@ -32,7 +32,7 @@ def main():
         if not colls:
             print("  X collection NOT FOUND for short_name")
             continue
-        versions = sorted({c.summary().get("version", "?") for c in colls})
+        versions = sorted({c.summary.get("version", "?") for c in colls})
         print(f"  OK collection found; versions on CMR: {versions}; catalog says {e.get('version')}")
         ver = e.get("version") if e.get("version") in versions else versions[-1]
         results = earthaccess.search_data(short_name=e["short_name"], version=ver)
