@@ -2,17 +2,98 @@
 
 NASA Space Apps Challenge project. Pick an Earth-science variable measured by NASA missions or models, pick a region and time period, and see **what is changing, where, by how much, and whether the change is statistically significant**. A secondary "lens" layer translates results for renewable-energy providers and farmers (long-term regional screening only).
 
-> Status: **Step 1 (vertical slice)** – MERRA-2 monthly 2 m temperature (T2M) for one demo region. Other categories, lenses and the globe come after Step 1 is confirmed.
+> Status: prototype. Four demo regions (US Southwest, Great Plains, Pacific Northwest, California
+> Central Valley) work out of the box with temperature, precipitation, soil moisture and 50 m wind.
+> Lenses and the interactive globe are still to come.
 
-## Setup
+## Run the app (quick start)
 
-Requires Python 3.11+.
+You do **not** need a NASA account or any big downloads to run the demo: the four demo regions
+read small data files that are already in this repository (`data/series/`).
 
+### 1. Install the prerequisites (once per computer)
+- **Python 3.11 or newer.** Check with `python --version`.
+  On Windows, if it is missing: `winget install Python.Python.3.12`, then close and reopen the terminal.
+- **Git**, to download the code. Check with `git --version`.
+- An **internet connection** while using the app: the chart library (Plotly) loads from a CDN.
+
+### 2. Download the code (once)
+Open a terminal (Windows: **PowerShell**; macOS/Linux: **Terminal**) in the folder where you want
+the project, then run:
+```
+git clone https://github.com/Ismail-deb/Nasa-App-challenge.git
+cd Nasa-App-challenge
+```
+**Every command below is run from this `Nasa-App-challenge` folder** (the one that contains
+`README.md`, `requirements.txt` and the `app` folder).
+
+### 3. Create the Python environment (once)
+Windows (PowerShell):
 ```
 python -m venv venv
-venv\Scripts\activate          # Windows  (source venv/bin/activate on macOS/Linux)
+venv\Scripts\activate
 pip install -r requirements.txt
 ```
+macOS / Linux:
+```
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+```
+After activating, the prompt starts with `(venv)`. If PowerShell refuses to run `activate`
+("running scripts is disabled on this system"), run this once, then try again:
+```
+Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
+```
+
+### 4. Start the app (every time)
+In the `Nasa-App-challenge` folder, activate the environment if the prompt does not already show
+`(venv)`, then start the server:
+```
+venv\Scripts\activate                 # Windows   (macOS/Linux: source venv/bin/activate)
+uvicorn app.main:app --port 8000
+```
+Wait for the line `Uvicorn running on http://127.0.0.1:8000`, then open
+**http://127.0.0.1:8000** in your browser. Keep the terminal open while you use the app;
+press **Ctrl+C** in it to stop the server.
+
+If `uvicorn` is "not recognized", the environment is not active; use
+`python -m uvicorn app.main:app --port 8000` instead, or activate it first.
+
+### 5. Use it
+1. Pick a **variable** from the dropdown (its description and data period appear underneath).
+2. Click one of the **Demo** buttons, or type a region (West, South, East, North in degrees)
+   and a time period, then click **Show trend**.
+3. Read the chart (monthly values with the trend line) and the result card (change per decade,
+   95% range, p-value, verdict, and notes on the data).
+
+Variables marked "(no data yet)" have not been exported for the demo regions yet. Typed regions
+outside the demo regions need the large gridded files in `data/processed/` (see *Data workflow*).
+
+### 6. Get the latest version
+```
+git pull
+```
+Then stop the server (Ctrl+C) and start it again (step 4), and reload the browser page with
+**Ctrl+F5** so it does not show an old cached copy.
+
+### Run the tests (optional)
+```
+python -m pytest -q
+```
+All tests are offline (no NASA access needed).
+
+### Troubleshooting
+| Problem | Fix |
+|---|---|
+| `python` not found (Windows) | Install Python (step 1), then open a **new** terminal. |
+| `No module named 'fastapi'` (or similar) | The environment is not active, or step 3 was skipped: run `venv\Scripts\activate`, then `pip install -r requirements.txt`. |
+| `address already in use` / port 8000 busy | Another copy is running. Stop it, or use another port: `uvicorn app.main:app --port 8001` and open http://127.0.0.1:8001. |
+| Buttons do nothing / no chart | Check the internet connection (the chart library loads from the web), then reload with Ctrl+F5. |
+| "Region/variable not available yet, try a preset" | That variable has no data for that region yet; use a Demo button or another variable. |
+| `ImportError: DLL load failed ... _netCDF4` (Windows) | Harmless for this app: it reads files with `h5netcdf`, which is in `requirements.txt`. |
+
+## Downloading NASA data (only for developers adding data)
 
 ### NASA Earthdata credentials
 Create a free account at https://urs.earthdata.nasa.gov, then provide credentials **either** via environment variables
