@@ -9,3 +9,4 @@ venv/
 .venv/
 env/
 .pytest_cache/
+pull.log
