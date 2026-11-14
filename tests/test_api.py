@@ -57,6 +57,8 @@ def test_trend_method_parameter_and_added_fields(client):
     assert default["method"] == "corrected" and plain["method"] == "plain"
     assert default["record_years"] == 20.0                       # 240 months
     assert default["slope_per_decade"] == plain["slope_per_decade"]
+    for k in ("ci_plain_low_per_decade", "ci_plain_high_per_decade", "variance_inflation"):
+        assert k in default
     assert set(plain) == set(default)                            # same response shape
     assert client.get("/trend", params={**q, "method": "magic"}).status_code == 400
 

@@ -63,7 +63,7 @@
     <span class="verdict" id="verdict"></span>
     <div class="stats">
       <div><span>Change per decade</span><b id="slope"></b></div>
-      <div><span>95% range</span><b id="ci"></b></div>
+      <div><span id="ciLabel">95% range (adjusted for autocorrelation)</span><b id="ci"></b></div>
       <div><span>p-value</span><b id="p"></b></div>
       <div><span>Record length</span><b id="len"></b></div>
     </div>
@@ -121,6 +121,7 @@ async function run() {
   $('verdict').className = 'verdict ' + (d.significant ? 'sig' : 'nosig');
   $('slope').textContent = `${sign(d.slope_per_decade)} ${d.units} / decade`;
   $('ci').textContent = `${sign(d.ci_low_per_decade)} to ${sign(d.ci_high_per_decade)}`;
+  $('ciLabel').textContent = d.method === 'corrected' ? '95% range (adjusted for autocorrelation)' : '95% range (plain)';
   $('p').textContent = d.p_value < 0.001 ? '< 0.001' : d.p_value.toFixed(3);
   $('len').textContent = `${d.record_years.toFixed(1)} years`;
   $('plain').textContent = `Over ${d.record_years.toFixed(1)} years, the fitted change is ${sign(d.slope_per_decade)} ${d.units} per decade. ` +

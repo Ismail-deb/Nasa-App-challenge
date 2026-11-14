@@ -105,12 +105,51 @@ def test_white_noise_false_positive_rate_stays_nominal():
     assert corrected < 0.10
 
 
-def test_method_changes_only_the_p_value():
+def test_method_changes_p_value_and_range_not_slope():
     s = ar1(321, 0.6, seed=5)
     a, b = analyze(s, method="plain"), analyze(s, method="corrected")
-    for k in ("slope_per_decade", "ci_low_per_decade", "ci_high_per_decade", "n_months", "record_years"):
+    for k in ("slope_per_decade", "n_months", "record_years", "ci_plain_low_per_decade", "ci_plain_high_per_decade"):
         assert a[k] == b[k]
     assert b["p_value"] > a["p_value"]       # persistence -> less evidence -> larger p
+    # plain method: main range IS the plain range
+    assert (a["ci_low_per_decade"], a["ci_high_per_decade"]) == (a["ci_plain_low_per_decade"], a["ci_plain_high_per_decade"])
+    assert a["variance_inflation"] == 1.0
+
+
+def width(r, plain=False):
+    k = "ci_plain_" if plain else "ci_"
+    return r[k + "high_per_decade"] - r[k + "low_per_decade"]
+
+
+def test_corrected_range_wider_on_autocorrelated_data():
+    rs = [analyze(ar1(321, 0.6, seed)) for seed in range(N_SEEDS)]
+    assert all(width(r) > width(r, plain=True) for r in rs)
+    assert all(r["ci_low_per_decade"] <= r["slope_per_decade"] <= r["ci_high_per_decade"] for r in rs)
+    assert np.median([r["variance_inflation"] for r in rs]) > 2
+
+
+def test_corrected_range_honest_coverage_on_autocorrelated_data():
+    """Trend-free AR(1): the true slope (0) should sit inside a 95% range about 95% of the time."""
+    rs = [analyze(ar1(321, 0.6, seed)) for seed in range(N_SEEDS)]
+    inside = lambda r, plain: (r["ci_plain_low_per_decade"] if plain else r["ci_low_per_decade"]) <= 0 <= (
+        r["ci_plain_high_per_decade"] if plain else r["ci_high_per_decade"])
+    plain = np.mean([inside(r, True) for r in rs])
+    corrected = np.mean([inside(r, False) for r in rs])
+    print(f"\nAR(1) 95% range contains true slope 0: plain={plain:.1%} corrected={corrected:.1%}")
+    assert plain < 0.80 and corrected > 0.88
+
+
+def test_corrected_range_equals_plain_on_white_noise():
+    """No significant autocorrelation -> inflation exactly 1 -> identical ranges."""
+    r = analyze(make(noise=1.0, seasonal=0.0, seed=3))
+    assert r["variance_inflation"] == 1.0
+    assert r["ci_low_per_decade"] == r["ci_plain_low_per_decade"]
+    assert r["ci_high_per_decade"] == r["ci_plain_high_per_decade"]
+    # across seeds, equality is the normal case (the rest: chance autocorrelation got flagged)
+    idx = pd.date_range("2000-01-01", periods=321, freq="MS")
+    same = [width(r) == width(r, plain=True) for r in
+            (analyze(pd.Series(np.random.default_rng(s).normal(size=321), index=idx)) for s in range(N_SEEDS))]
+    assert np.mean(same) > 0.7
 
 
 def test_missing_months_work_with_corrected_method():
