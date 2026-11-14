@@ -23,14 +23,33 @@ machine urs.earthdata.nasa.gov login <user> password <pass>
 ```
 Credentials are never stored in this repo (`.env`, `.netrc` are git-ignored).
 
-## Run (Step 1)
+## Data workflow
+
+The running app never calls NASA. It reads pre-processed files in `data/processed/` (git-ignored).
+Data is kept at **native resolution** (no resampling).
 
 ```
-python check_catalog.py --only M2TMNXSLV   # verify the catalog entry against NASA
-python pull_data.py weather_climate        # download + process to data/processed/
-python -m pytest                           # stats unit tests
+python check_catalog.py                    # verify catalog.yml against NASA (needs credentials)
+python pull_data.py atmosphere_solar       # also: weather_climate, hydrology, cryosphere
+python -m pytest                           # unit tests (offline)
 uvicorn app.main:app --reload              # then open http://127.0.0.1:8000
 ```
+
+`pull_data.py` downloads each monthly granule once (shared across variables of the same
+collection), extracts the needed variables, deletes the raw file, and writes the result
+incrementally (low RAM). Existing outputs are skipped; use `--force` to redo, `--start/--end`
+(YYYY-MM) to limit the period. `check_catalog.py` prints real variable names/units.
+
+### Moving data between machines
+Pull on a fast machine, then publish the processed files as a GitHub Release (not in git history):
+
+```
+winget install GitHub.cli ; gh auth login
+gh release create data-v1 data/processed/*.nc --title "Processed data v1" --notes "Native-resolution monthly data"
+# later additions:  gh release upload data-v1 data/processed/NEWFILE.nc --clobber
+```
+On any other machine: `python fetch_data.py` (no NASA account needed). GitHub limits each
+release file to under 2 GB.
 
 ## Architecture (text)
 
