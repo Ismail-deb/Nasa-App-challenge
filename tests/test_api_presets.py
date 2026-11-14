@@ -101,7 +101,7 @@ def test_missing_data_error_is_friendly(env):
         assert msg.startswith("Region/variable not available yet, try a preset.")
         assert "ready for: boxa" in msg
     r = client.get("/trend", params={"variable": "M2TMNXRAD/SWGDN", "bbox": "-1,-1,1,1"})
-    assert r.status_code == 404 and "none for this variable yet" in r.json()["detail"]
+    assert r.status_code == 404 and "not ready for any preset yet" in r.json()["detail"]
     assert client.get("/timeseries", params={"variable": T2M, "bbox": "-1,-1,1,1"}).status_code == 404
 
 

@@ -82,9 +82,9 @@ def _series(variable, bbox, start, end):
         return entry, data.regional_mean(entry, box, start, end), "gridded", region
     except FileNotFoundError:
         ready = _preset_regions_with_series(entry)
-        hint = ", ".join(ready) if ready else "none for this variable yet"
-        raise HTTPException(404, f"Region/variable not available yet, try a preset. "
-                                 f"{entry['name']} is ready for: {hint}.")
+        hint = (f"{entry['name']} is ready for: {', '.join(ready)}." if ready
+                else f"{entry['name']} is not ready for any preset yet.")
+        raise HTTPException(404, f"Region/variable not available yet, try a preset. {hint}")
     except ValueError as ex:
         raise HTTPException(400, str(ex))
 

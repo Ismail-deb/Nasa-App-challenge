@@ -90,6 +90,26 @@ on, then prints a SUCCESS/FAILURE line per category. Re-running the same script 
 categories are skipped and cached granules are reused. Add `-Cleanup` to delete the raw caches
 once every category in that stream has succeeded.
 
+### Preset demo regions (works without the big data)
+`presets.yml` defines four demo regions, each with a recommended lens:
+
+| Preset | Box (W, S, E, N) | Lens |
+|---|---|---|
+| `southwest`: Arizona and southern Nevada | -117.0, 31.3, -109.0, 38.0 | solar |
+| `great_plains`: Texas to Iowa | -103.0, 30.0, -91.0, 43.5 | wind |
+| `pacific_northwest`: US Columbia basin | -124.0, 42.0, -111.0, 49.0 | hydro |
+| `central_valley`: California Central Valley | -122.6, 35.0, -118.8, 40.6 | farming |
+
+`python export_series.py` computes each preset's monthly regional mean from the gridded files
+(using the backend's own function) and writes small CSVs plus `index.yml` to `data/series/`, which
+**is committed to git** (about 9 KB per series). Re-run it after new gridded files arrive; on a
+machine without some gridded files it skips them and keeps the series exported elsewhere.
+
+`/trend` serves a request whose box matches a preset (within 0.05°) from `data/series/`, anything
+else from the gridded files, and otherwise answers "Region/variable not available yet, try a
+preset". `GET /presets` lists the presets, their lens and the variables ready for each. So a fresh
+clone can run the demo for the preset regions with no NASA download at all.
+
 ### Moving data between machines
 Pull on a fast machine, then publish the processed files as a GitHub Release (not in git history):
 
@@ -142,7 +162,7 @@ How well it works, checked on 200 computer-made series that have this month-to-m
 With a real trend added, the corrected test still detected it 82% of the time (basic test: 96%,
 but the basic test also cries wolf far more often). On series with no month-to-month memory the
 correction usually changes nothing. Example: for 2 m temperature over the US Southwest
-(2000-2026) the trend is +0.49 °C per decade either way; the 95% range widens from +0.28 to +0.69
+(31-37°N, 115-109°W, 2000-2026) the trend is +0.49 °C per decade either way; the 95% range widens from +0.28 to +0.69
 to **+0.25 to +0.72**, and the trend stays significant (p = 0.00005). `method=plain` in the API
 selects the basic test; the unadjusted range is also returned as `ci_plain_low/high_per_decade`.
 
