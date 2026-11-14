@@ -1,0 +1,11 @@
+earthaccess
+xarray
+netCDF4
+numpy
+pandas
+pymannkendall
+fastapi
+uvicorn
+pyyaml
+pytest
+httpx
