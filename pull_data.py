@@ -1,12 +1,18 @@
 """Download monthly granules for one category and write processed NetCDF files (native resolution).
 
-    python pull_data.py weather_climate [--start 2000-01] [--end 2024-12] [--keep-raw] [--force]
+    python pull_data.py weather_climate [--start 2000-01] [--end 2024-12] [--force] [--cleanup]
     python pull_data.py hydrology --coarsen 5      # IMERG block factor (default from catalog)
     python pull_data.py hydrology --native         # IMERG at native 0.1 degrees (large file)
 
 - Entries that share a NASA collection (e.g. all MERRA-2 SLV variables) are served by ONE
   download of each granule; every needed variable is extracted from it.
-- Each raw granule is deleted after extraction (unless --keep-raw).
+- Raw granules are cached in data/raw/<short_name>/ (git-ignored) and reused by later runs, e.g.
+  weather_climate and atmosphere_solar share the MERRA-2 SLV granules. A cached file is used only
+  if it matches NASA's metadata size and every needed variable reads cleanly; otherwise it is
+  deleted and re-downloaded. Downloads land in a private temp dir and are renamed into the cache
+  atomically, so an interrupted run never leaves a half-written file under a real name.
+  --cleanup deletes the cache for this category's collections afterwards.
+- Exit code: 0 ok, 3 finished with gaps (some granules failed), 1 error.
 - MERRA-2 and GLDAS keep their native grids. Entries with `coarsen: N` in catalog.yml (IMERG,
   0.1 degrees) are block-averaged NxN (NaN-aware) BEFORE writing; default N=5 gives 0.5 degrees.
   Missing values -> NaN.
@@ -106,7 +112,9 @@ class IncrementalWriter:
         self.name = entry["variable"] if isinstance(entry["variable"], str) else entry["id"].split("/")[1]
         PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
         self.path = processed_path(entry)
-        self.tmp = self.path.with_suffix(".part")
+        import uuid
+        # unique per process/run, so two runs can never write the same temp file
+        self.tmp = self.path.with_name(f"{self.path.name}.part-{os.getpid()}-{uuid.uuid4().hex[:8]}")
         self.f = h5netcdf.File(self.tmp, "w")
         self.f.dimensions = {"time": None, "lat": len(lat), "lon": len(lon)}
         for nm, vals, units in (("lat", lat, "degrees_north"), ("lon", lon, "degrees_east")):
@@ -141,14 +149,142 @@ class IncrementalWriter:
         self.n += k
         self.buf = []
 
+    def abort(self):
+        """Interrupted run: close and delete the temp file; the real output is never touched."""
+        try:
+            self.f.close()
+        except Exception:
+            pass
+        try:
+            os.remove(self.tmp)
+        except OSError:
+            pass
+
     def close(self):
         self.flush()
         self.f.close()
-        os.replace(self.tmp, self.path)
+        os.replace(self.tmp, self.path)      # atomic: readers see the old file or the new one
         print(f"  wrote {self.path.name}  {self.n} months  {self.path.stat().st_size / 1e6:.0f} MB")
 
 
-def pull_collection(entries: list, start: str, end: str | None, keep_raw: bool):
+# ---------------------------------------------------------------- raw granule cache
+
+STALE_SECONDS = 12 * 3600   # temp files/dirs older than this are leftovers of a killed run
+
+
+def granule_filename(g) -> str | None:
+    """File name the granule will have on disk (basename of its data link), if known."""
+    try:
+        links = g.data_links()
+    except Exception:
+        return None
+    return os.path.basename(links[0].split("?")[0]) if links else None
+
+
+def expected_bytes(g) -> float | None:
+    """Granule size from NASA metadata (earthaccess reports MB), or None if unknown."""
+    try:
+        mb = float(g.size() if callable(g.size) else g.size)
+    except Exception:
+        return None
+    return mb * 1024 * 1024 if mb > 0 else None
+
+
+def size_ok(path, g) -> bool:
+    """False if the file is clearly shorter than NASA says it is (a partial download)."""
+    exp = expected_bytes(g)
+    return exp is None or os.path.getsize(path) >= 0.98 * exp
+
+
+def read_granule(path, group, entries, g):
+    """Fully read one granule: (month, {entry id: (lat, lon) array}). Raises if partial/corrupt."""
+    if not size_ok(path, g):
+        raise OSError(f"{os.path.basename(path)} is smaller than its NASA metadata size (partial)")
+    with open_granule(str(path), group) as ds:
+        month = granule_month(ds, str(path))
+        # extract all before writing any; coarsen only entries that ask for it
+        arrays = {e["id"]: block_mean(extract(ds, e), e.get("coarsen", 1) or 1) for e in entries}
+    return month, arrays
+
+
+def download_to_cache(earthaccess, g, cache_dir):
+    """Download into a private temp dir, then atomically rename into the cache.
+
+    The temp dir name is unique per process and call (pid + random), so concurrent runs never
+    write to the same file. os.replace is atomic: the cache only ever holds complete downloads
+    (a granule is either absent, or a whole file that may still fail validation).
+    """
+    import uuid
+
+    tmp = cache_dir / f".dl-{os.getpid()}-{uuid.uuid4().hex[:8]}"
+    tmp.mkdir(parents=True)
+    try:
+        files = earthaccess.download([g], str(tmp))
+        if not files:
+            raise RuntimeError("download returned no file")
+        src = files[0]
+        dest = cache_dir / os.path.basename(str(src))
+        try:
+            os.replace(src, dest)
+        except PermissionError:
+            # Windows: another process has an identical copy open. Theirs is complete
+            # (it got there by atomic rename), so keep it and drop ours.
+            if not dest.exists():
+                raise
+        return dest
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def load_granule(earthaccess, g, cache_dir, group, entries):
+    """Cache hit if the cached file validates; otherwise (re)download and validate.
+    Returns (month, arrays, was_downloaded)."""
+    name = granule_filename(g)
+    if name:
+        cached = cache_dir / name
+        if cached.exists():
+            try:
+                return (*read_granule(cached, group, entries, g), False)
+            except Exception as ex:
+                print(f"  cached {name} unusable ({ex}); re-downloading")
+                try:
+                    cached.unlink()
+                except OSError:
+                    pass
+    path = download_to_cache(earthaccess, g, cache_dir)
+    try:
+        return (*read_granule(path, group, entries, g), True)
+    except Exception:
+        try:
+            path.unlink()          # never leave a bad file in the cache
+        except OSError:
+            pass
+        raise
+
+
+def remove_stale_temp(folder):
+    """Delete temp dirs/files left by killed runs (older than STALE_SECONDS). A live run's
+    temp files are younger, so they are never touched."""
+    import time
+
+    if not folder.exists():
+        return
+    now = time.time()
+    for p in list(folder.glob(".dl-*")) + list(folder.glob("*.part-*")):
+        try:
+            if now - p.stat().st_mtime > STALE_SECONDS:
+                if p.is_dir():
+                    shutil.rmtree(p, ignore_errors=True)
+                else:
+                    p.unlink()
+        except OSError:
+            pass
+
+
+# ---------------------------------------------------------------- pulling
+
+def pull_collection(entries: list, start: str, end: str | None) -> int:
+    """Pull one collection for the given entries. Returns the number of failed granules."""
     import earthaccess
 
     first = entries[0]
@@ -164,80 +300,92 @@ def pull_collection(entries: list, start: str, end: str | None, keep_raw: bool):
     if "coarsen" in first:
         print(projected_size_report(len(results), first["coarsen"] or 1))
 
-    raw = RAW_DIR / sn
-    raw.mkdir(parents=True, exist_ok=True)
-    writers, last, failed = {}, None, 0
-    for i, g in enumerate(results, 1):
-        try:
-            files = earthaccess.download([g], str(raw))
-            if not files:
-                raise RuntimeError("no file returned")
-            with open_granule(files[0], group) as ds:
-                m = granule_month(ds, files[0])
+    cache = RAW_DIR / sn
+    cache.mkdir(parents=True, exist_ok=True)
+    remove_stale_temp(cache)
+    remove_stale_temp(PROCESSED_DIR)
+    writers, last, failed, downloaded = {}, None, 0, 0
+    try:
+        for i, g in enumerate(results, 1):
+            try:
+                m, arrays, fresh = load_granule(earthaccess, g, cache, group, entries)
                 if last is not None and m <= last:
                     raise RuntimeError(f"granule out of order ({m:%Y-%m})")
-                # extract all before writing any; coarsen only entries that ask for it
-                arrays = {e["id"]: block_mean(extract(ds, e), e.get("coarsen", 1) or 1)
-                          for e in entries}
-        except Exception as ex:
-            failed += 1
-            print(f"  granule {i} skipped: {ex}")
-            continue
-        for e in entries:
-            da = arrays[e["id"]]
-            if e["id"] not in writers:
-                writers[e["id"]] = IncrementalWriter(e, da["lat"].values, da["lon"].values)
-            writers[e["id"]].add(m, da)
-        last = m
-        if not keep_raw:
-            for f in files:
-                try:
-                    os.remove(f)
-                except OSError:
-                    pass
-        if i % 24 == 0:
-            print(f"  {i}/{len(results)}")
+            except Exception as ex:
+                failed += 1
+                print(f"  granule {i} skipped: {ex}")
+                continue
+            downloaded += fresh
+            for e in entries:
+                da = arrays[e["id"]]
+                if e["id"] not in writers:
+                    writers[e["id"]] = IncrementalWriter(e, da["lat"].values, da["lon"].values)
+                writers[e["id"]].add(m, da)
+            last = m
+            if i % 24 == 0:
+                print(f"  {i}/{len(results)}  ({downloaded} downloaded, {i - downloaded - failed} from cache)")
+    except BaseException:
+        for w in writers.values():   # interrupted: discard partial outputs, keep the cache
+            w.abort()
+        raise
 
+    print(f"  granules: {downloaded} downloaded, {len(results) - downloaded - failed} from cache, {failed} failed")
     if failed:
         print(f"  WARNING: {failed} granules failed; the series has gaps. Re-run with --force to retry.")
     for w in writers.values():
         w.close()
-    if not keep_raw:
-        shutil.rmtree(raw, ignore_errors=True)
+    return failed
 
 
-def main():
+def cleanup_cache(entries):
+    for sn in sorted({e["short_name"] for e in entries}):
+        d = RAW_DIR / sn
+        if d.exists():
+            size = sum(f.stat().st_size for f in d.rglob("*") if f.is_file()) / 1e9
+            shutil.rmtree(d, ignore_errors=True)
+            print(f"cleanup: removed raw cache {d} ({size:.1f} GB)")
+
+
+def main(argv=None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("category")
     ap.add_argument("--start", default="2000-01", help="YYYY-MM (default 2000-01)")
     ap.add_argument("--end", default=None, help="YYYY-MM (default: latest)")
-    ap.add_argument("--keep-raw", action="store_true")
-    ap.add_argument("--force", action="store_true", help="re-pull even if the output exists")
+    ap.add_argument("--force", action="store_true", help="re-process even if the output exists")
+    ap.add_argument("--cleanup", action="store_true",
+                    help="afterwards, delete the raw cache of the collections this category uses")
     ap.add_argument("--coarsen", type=int, default=None,
                     help="block factor for entries that have `coarsen` in catalog.yml (IMERG)")
     ap.add_argument("--native", action="store_true", help="disable coarsening (factor 1)")
-    args = ap.parse_args()
+    args = ap.parse_args(argv)
 
     entries = [e for _, e in iter_entries(load_catalog(), args.category)]
+    if not entries:
+        raise SystemExit(f"No pullable entries for category {args.category!r}")
     for e in entries:                      # only entries that opt in are ever coarsened
         if "coarsen" in e:
             e["coarsen"] = 1 if args.native else (args.coarsen or e["coarsen"])
-    if not entries:
-        raise SystemExit(f"No pullable entries for category {args.category!r}")
     todo = [e for e in entries if args.force or not processed_path(e).exists()]
     for e in entries:
         if e not in todo:
             print(f"skip {e['id']} (already at {processed_path(e).name}; --force to redo)")
-    if not todo:
-        return
 
-    groups = defaultdict(list)
-    for e in todo:
-        groups[(e["short_name"], e.get("version"), e.get("group"))].append(e)
-    earthdata_login()
-    for group_entries in groups.values():
-        pull_collection(group_entries, args.start, args.end, args.keep_raw)
+    failed = 0
+    if todo:
+        groups = defaultdict(list)
+        for e in todo:
+            groups[(e["short_name"], e.get("version"), e.get("group"))].append(e)
+        earthdata_login()
+        for group_entries in groups.values():
+            failed += pull_collection(group_entries, args.start, args.end)
+
+    if args.cleanup:
+        if failed:
+            print("cleanup skipped: some granules failed; keeping the cache so a re-run is fast")
+        else:
+            cleanup_cache(entries)
+    return 3 if failed else 0       # 3 = finished, but with gaps
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
