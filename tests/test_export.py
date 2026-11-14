@@ -53,10 +53,11 @@ def test_cos_latitude_weighting_matches_hand_computation(env):
 def test_index_contents_and_missing_sources_skipped(env, capsys):
     proc, series = env
     write_grid(proc / "M2TMNXSLV_T2M.nc", [283.15, 313.15])
-    report = export_series.export()                           # all 5 variables, only T2M present
+    report = export_series.export()                           # all variables, only T2M present
     assert sorted(report["written"]) == ["T2M__boxa.csv", "T2M__boxb.csv"]
-    assert len(report["skipped"]) == 4
-    assert "skip GPM_3IMERGM/precipitation" in capsys.readouterr().out
+    assert len(report["skipped"]) == len(export_series.VARIABLES) - 1
+    assert all(reason.startswith("file missing") for _, _, reason in report["skipped"])
+    assert "skip GPM_3IMERGM/precipitation: file missing" in capsys.readouterr().out
     idx = presets.read_index()
     assert len(idx) == 2
     r = next(x for x in idx if x["region"] == "boxa")

@@ -37,42 +37,59 @@ def unit_label(entry: dict) -> str:
 
 SECONDS_PER_DAY = 86400
 
-# card_units -> the stored unit it must come from. Anything else is refused, never guessed.
-CARD_SOURCE_UNITS = {
-    "mm/month": "mm/hr",          # IMERG monthly mean rate
-    "mm/day": "kg m-2 s-1",       # GLDAS mean flux; 1 kg/m2 of water = 1 mm
-}
+
+def _conversion(entry: dict, series_units: str | None):
+    """(kind, factor, note) for the display conversion of this entry, or None if it is shown as
+    stored. Only these exact (stored unit -> display unit) combinations exist; anything else is
+    refused with an error, never guessed. Units verified against a real GLDAS 2.1 / IMERG v07 file:
+      mm/hr (IMERG monthly mean rate)                 -> mm/month: x 24 x days in that month
+      kg m-2 s-1 (GLDAS *_tavg: mean of 3-h averages) -> mm/day:   x 86400   (1 kg/m2 water = 1 mm)
+      kg m-2 with accumulation_hours: 3
+                 (GLDAS *_acc: mean of 3-h totals)    -> mm/day:   x 8       (8 three-hour periods/day)
+    """
+    card = entry.get("card_units")
+    if not card:
+        return None
+    units, acc = entry["units"], entry.get("accumulation_hours")
+    if card == "mm/month" and units == "mm/hr":
+        kind = ("per_month_days", HOURS_PER_MEAN_MONTH,
+                "mean rate in mm/hr x 24 h x days in the month = mm/month")
+    elif card == "mm/day" and units == "kg m-2 s-1" and not acc:
+        kind = ("constant", float(SECONDS_PER_DAY),
+                "mean rate in kg/m2 per second x 86,400 s = mm/day of water")
+    elif card == "mm/day" and units == "kg m-2" and acc == 3:
+        kind = ("constant", 8.0,
+                "monthly mean of 3-hour accumulations (kg/m2 per 3 h) x 8 = mm/day of water")
+    else:
+        raise ValueError(f"{entry['id']}: no known conversion from stored units {units!r} "
+                         f"(accumulation_hours={acc}) to {card!r}")
+    if series_units not in (None, units):
+        raise ValueError(f"{entry['id']}: series stored in {series_units!r}, expected {units!r}")
+    return kind
 
 
-def _check_source_units(entry, series_units):
-    need = CARD_SOURCE_UNITS[entry["card_units"]]
-    if entry["units"] != need or series_units not in (None, need):
-        raise ValueError(f"{entry['id']}: expected stored units {need} for the {entry['card_units']} "
-                         f"display, got file units {entry['units']!r}, series units {series_units!r}")
+def conversion_note(entry: dict) -> str | None:
+    """Plain statement of how stored values become displayed values (for index.yml), or None."""
+    c = _conversion(entry, None)
+    return c[2] if c else None
 
 
 def convert_values(entry: dict, ser: pd.Series, series_units: str | None = None) -> pd.Series:
-    """Monthly series values in display units.
-    mm/month: IMERG mean rate (mm/hr) x 24 x days in that calendar month.
-    mm/day:   GLDAS mean flux (kg m-2 s-1 = mm/s of water) x 86400."""
-    card = entry.get("card_units")
-    if card not in CARD_SOURCE_UNITS:
+    """Monthly series values in display units (see _conversion)."""
+    c = _conversion(entry, series_units)
+    if c is None:
         return ser
-    _check_source_units(entry, series_units)
-    if card == "mm/month":
+    if c[0] == "per_month_days":
         return ser * 24 * ser.index.days_in_month
-    return ser * SECONDS_PER_DAY
+    return ser * c[1]
 
 
 def slope_factor(entry: dict, series_units: str | None = None) -> float:
     """Factor turning a slope (or range end, or fitted value) from stored units into display
     units. One constant for every month, so slope, both range ends and the fitted line convert
     the same way and the significance test is untouched (mm/hr -> mm per average month)."""
-    card = entry.get("card_units")
-    if card not in CARD_SOURCE_UNITS:
-        return 1.0
-    _check_source_units(entry, series_units)
-    return HOURS_PER_MEAN_MONTH if card == "mm/month" else float(SECONDS_PER_DAY)
+    c = _conversion(entry, series_units)
+    return 1.0 if c is None else c[1]
 
 
 # ---------------------------------------------------------------- formatting

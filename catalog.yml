@@ -115,10 +115,15 @@ categories:
         short_name: GLDAS_NOAH025_M
         version: "2.1"         # 2.1 covers 2000-present (2.0 stops 2014)
         variable: Qs_acc
-        units: kg m-2
-        unit_label: kg/m² per 3 hours (= mm of water)
-        description: Rain or melt that flows over the ground surface instead of soaking in.
-        note: A proxy for water availability. It is NOT river flow.
+        units: kg m-2               # file: monthly mean of past-3-hour accumulations (cell_methods time: mean)
+        accumulation_hours: 3       # so the stored value is kg/m2 per 3 hours
+        card_units: mm/day          # display only: x 8 (eight 3-hour periods per day)
+        description: >
+          Rain or snowmelt that runs off over the ground instead of soaking in, in millimetres of
+          water per day (monthly average).
+        note: >
+          A proxy for water availability. It is NOT river flow. GLDAS stores it as the monthly
+          average of 3-hour totals (kg/m² per 3 hours); shown here x 8 as mm per day.
       - id: GLDAS_NOAH025_M/Evap_tavg
         name: Evaporation
         short_name: GLDAS_NOAH025_M
@@ -126,7 +131,11 @@ categories:
         variable: Evap_tavg
         units: kg m-2 s-1
         card_units: mm/day          # display only: x 86400 (1 kg/m2 of water = 1 mm)
-        description: How fast water is returning to the air from soil, plants and water surfaces.
+        description: >
+          Water returning to the air from soil, plants and open water (evapotranspiration), in
+          millimetres per day (monthly average).
+        note: >
+          GLDAS model estimate. Stored as a mean rate in kg/m² per second; shown x 86,400 as mm per day.
       - id: GRACE/groundwater
         name: Groundwater
         status: planned          # TODO: GRACE, different archive
@@ -141,21 +150,31 @@ categories:
         variable: Snowf_tavg
         units: kg m-2 s-1
         card_units: mm/day          # display only: x 86400, as water equivalent
-        description: How fast snow is falling, averaged over the month.
+        description: >
+          How much snow falls, as millimetres of melted water per day (monthly average).
+        note: >
+          GLDAS model estimate. Stored as a mean rate in kg/m² per second; shown x 86,400 as mm of
+          water per day. Months with zero are real (no snowfall), not missing.
       - id: GLDAS_NOAH025_M/SnowDepth_inst
         name: Snow depth
         short_name: GLDAS_NOAH025_M
         version: "2.1"         # 2.1 covers 2000-present (2.0 stops 2014)
         variable: SnowDepth_inst
-        units: m
-        description: How deep the snow lies on the ground.
+        units: m                    # file: monthly mean of instantaneous values
+        description: How deep the snow lies on the ground, in metres (monthly average).
+        note: >
+          Model estimate (GLDAS). Grid cells on permanent ice sheets such as Greenland hold very large values that are not seasonal snow; months with zero are real (no snow), not missing.
       - id: GLDAS_NOAH025_M/SWE_inst
         name: Snow water equivalent
         short_name: GLDAS_NOAH025_M
         version: "2.1"         # 2.1 covers 2000-present (2.0 stops 2014)
         variable: SWE_inst
-        units: kg m-2
-        description: How much water you would get if the snowpack melted.
+        units: kg m-2               # file: monthly mean of instantaneous values; 1 kg/m2 = 1 mm
+        description: >
+          How much water you would get if the snowpack melted, in kg/m² (the same as millimetres
+          of water; monthly average).
+        note: >
+          Model estimate (GLDAS). Grid cells on permanent ice sheets such as Greenland hold very large values that are not seasonal snow; months with zero are real (no snow), not missing.
   ocean:
     label: Ocean
     variables:

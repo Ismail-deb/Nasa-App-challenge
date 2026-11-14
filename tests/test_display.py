@@ -165,3 +165,35 @@ def test_api_precipitation_card(tmp_path, monkeypatch):
     assert j["slope_text"] not in ("+0.00", "-0.00") and j["percent_text"].endswith("%")
     assert "Not significant means" in j["explanation"]
     assert c.get("/timeseries", params=q).json()["values"][1] == pytest.approx(round(vals[1] * 24 * 29, 4))  # Feb 2000
+
+
+def test_runoff_accumulation_shown_in_mm_per_day():
+    """GLDAS Qs_acc: monthly mean of 3-hour totals (kg/m2 per 3 h); x 8 three-hour periods = mm/day."""
+    q = {"id": "GLDAS_NOAH025_M/Qs_acc", "name": "Surface runoff", "units": "kg m-2",
+         "accumulation_hours": 3, "card_units": "mm/day"}
+    s = pd.Series([0.0089, 0.05], index=pd.date_range("2000-01-01", periods=2, freq="MS"))
+    assert np.allclose(display.convert_values(q, s, "kg m-2").values, [0.0712, 0.4])
+    assert display.slope_factor(q) == 8.0
+    assert "x 8" in display.conversion_note(q)
+
+
+def test_kg_m2_state_variables_are_never_multiplied():
+    """Soil moisture and SWE are also 'kg m-2' but are amounts, not accumulations: no conversion,
+    and asking for mm/day without accumulation_hours is refused rather than guessed."""
+    cat = {e["id"]: e for _, e in common.iter_entries(common.load_catalog())}
+    for vid in ("GLDAS_NOAH025_M/SoilMoi0_10cm_inst", "GLDAS_NOAH025_M/SWE_inst", "GLDAS_NOAH025_M/SnowDepth_inst"):
+        assert display.slope_factor(cat[vid]) == 1.0 and display.conversion_note(cat[vid]) is None
+    with pytest.raises(ValueError):
+        display.slope_factor({"id": "x", "units": "kg m-2", "card_units": "mm/day"})
+
+
+def test_catalog_gldas_display_units_match_verified_file_attributes():
+    cat = {e["id"]: e for _, e in common.iter_entries(common.load_catalog())}
+    assert display.unit_label(cat["GLDAS_NOAH025_M/Qs_acc"]) == "mm/day"
+    assert cat["GLDAS_NOAH025_M/Qs_acc"]["accumulation_hours"] == 3
+    assert display.slope_factor(cat["GLDAS_NOAH025_M/Qs_acc"]) == 8.0
+    assert display.slope_factor(cat["GLDAS_NOAH025_M/Evap_tavg"]) == 86400.0
+    assert display.slope_factor(cat["GLDAS_NOAH025_M/Snowf_tavg"]) == 86400.0
+    assert display.unit_label(cat["GLDAS_NOAH025_M/SnowDepth_inst"]) == "m"
+    assert display.unit_label(cat["GLDAS_NOAH025_M/SWE_inst"]) == "kg/m² (= mm of water)"
+    assert "NOT river flow" in cat["GLDAS_NOAH025_M/Qs_acc"]["note"]
