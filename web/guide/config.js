@@ -2,10 +2,19 @@
 //
 // The guide's name is defined HERE AND NOWHERE ELSE. Every label, tutorial line and tooltip
 // is built from it; texts below use the placeholder {name}. To rename the guide, change this line.
-const GUIDE_NAME = "Orbit";
+const GUIDE_NAME = "Comet";
 
-// What the guide says when its picture is clicked outside the tutorial.
-const GUIDE_GREETING = "Hi, I'm {name}. Press any ? button and I'll explain that word, or use the replay button at the top for the tour.";
+// The character's three poses: one transparent picture each, all on the same canvas size and with the
+// feet in the same place, so swapping between them never makes him jump. If any of them fails to load,
+// the guide falls back to a small drawn drone.
+const GUIDE_IMAGES = {
+  "neutral": "/static/guide/assets/comet-neutral.webp",
+  "talking": "/static/guide/assets/comet-talking.webp",
+  "pointing": "/static/guide/assets/comet-pointing.webp"
+};
+
+// What the guide says when he is clicked outside the tutorial.
+const GUIDE_GREETING = "Hi, I'm {name}, your fox guide. Press any ? button and I'll explain that word, or use the replay button at the top for the tour.";
 
 // The first-visit tutorial. Kept as plain JSON so tests/test_guide.py can read it.
 //   target      CSS selector of the real page element(s) to highlight
@@ -16,7 +25,7 @@ const GUIDE_STEPS = [
   {
     "id": "welcome",
     "target": "#appTitle",
-    "text": "Hi, I'm {name}, your guide! This tool uses NASA satellite and model data to show how sunshine, wind, rain and more have changed over the years, and whether a trend is \"significant\"."
+    "text": "Hi, I'm {name}, your fox guide! This tool uses NASA satellite and model data to show how sunshine, wind, rain and more have changed over the years, and whether a trend is \"significant\"."
   },
   {
     "id": "demos",

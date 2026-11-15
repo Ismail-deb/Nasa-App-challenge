@@ -81,11 +81,15 @@ Then stop the server (Ctrl+C) and start it again (step 4), and reload the browse
 **Ctrl+F5** so it does not show an old cached copy.
 
 ### The guide (optional)
-On the first visit a small animated guide walks through the page in 7 steps (Skip ends it). The
-header has an on/off switch for the guide and a replay button; the "?" buttons on the result card
-make it explain a term. No voice, no video, no extra downloads. Its name, tutorial lines and tips
-are in `web/guide/config.js` (the name is defined there once, as `GUIDE_NAME`). To see the
-first-visit tutorial again, use the replay button, or clear the site data for the page.
+On the first visit Comet, a small fox, walks through the page in 7 steps (Skip ends it). He floats
+above the page with no frame: drag him anywhere (mouse or touch; arrow keys when he has the focus),
+and the "-" button tucks him away to just his head (narrow windows start that way). While idle he
+keeps off the chart, the result card and the globe. The header has an on/off switch and a replay
+button; the "?" buttons on the result card make him explain a term. No voice, no video, no extra
+downloads. His name, tutorial lines, tips and picture files are in `web/guide/config.js` (the name
+is defined there once, as `GUIDE_NAME`; the three poses are in `web/guide/assets/`). If a picture
+cannot be loaded, a small drawn drone takes his place. To see the first-visit tutorial again, use
+the replay button, or clear the site data for the page.
 
 ### Run the tests (optional)
 ```
@@ -334,5 +338,6 @@ not in that lens.
   trends for different variables cover slightly different years.
 
 ## Credits
+- Guide artwork generated with AI.
 - Data: NASA GES DISC / Earthdata. MERRA-2: GMAO, NASA.
 - Learning material: NASA GES DISC tutorials, https://github.com/nasa/gesdisc-tutorials (read-only reference; not modified or included).

@@ -31,6 +31,14 @@ async function load() {
   w = f.contentWindow; d = f.contentDocument; $ = id => d.getElementById(id);
   if (!w.__hooked) hook(w);
   await waitFor(() => d.querySelectorAll('#demos button').length > 0);
+  // The headless browser runs on virtual time, where CSS transitions do not advance with sleep(): measure where
+  // he ends up, not where he is on the way (the transition rules themselves are checked in tests/test_guide.py,
+  // and the reduced-motion run, which keeps the page's own CSS, checks that there is none).
+  if (!reducedRun) {
+    const st = d.createElement('style');
+    st.textContent = '.guide, .guide-spot { transition: none !important; }';
+    d.head.appendChild(st);
+  }
 }
 function hook(cw) {
   cw.__hooked = true;
@@ -56,12 +64,22 @@ function unionRect(sel) {
   });
   return r;
 }
+// which of the three pictures is showing
+const pose = () => { const i = [...d.querySelectorAll('.guide-img')].find(x => w.getComputedStyle(x).opacity === '1'); return i ? i.dataset.pose : null; };
+// inside the window (he may stand 12px past the edge)
+const cw = () => d.documentElement.clientWidth;
+const inWindow = b => b.left >= -13 && b.top >= -1 && b.right <= cw() + 13 && b.bottom <= w.innerHeight + 1;
+// resize the page's window; the event is sent by hand, as a headless run does not always deliver it
+const resize = async (width, height) => {
+  f.width = width; f.height = height; await sleep(100);
+  w.dispatchEvent(new w.Event('resize')); await sleep(300);
+};
 const settled = () => waitFor(() => $('guide').dataset.state !== 'talking', 20000);
 
 async function walkTour(record) {
   const steps = w.eval('GUIDE_STEPS');
   for (let i = 0; i < steps.length; i++) {
-    const g = $('guide'), stateAtStart = g.dataset.state, typedAtStart = text('.guide-typed');
+    const g = $('guide'), stateAtStart = g.dataset.state, poseAtStart = pose(), typedAtStart = text('.guide-typed');
     if (steps[i].needsResult) await waitFor(() => !$('card').classList.contains('hidden'));
     await settled();
     await sleep(500);                                  // spotlight transition
@@ -70,15 +88,19 @@ async function walkTour(record) {
     const sb = {left: px('left'), top: px('top'), right: px('left') + px('width'), bottom: px('top') + px('height'), width: px('width')};
     record.push({
       id: steps[i].id, spoken: text('.guide-sr'), typed: text('.guide-typed'), typedAtStart, progress: text('.guide-progress'),
-      stateAtStart, stateAfter: g.dataset.state, next: text('[data-act="next"]'),
+      stateAtStart, stateAfter: g.dataset.state, poseAtStart, poseAfter: pose(), next: text('[data-act="next"]'),
       backShown: !d.querySelector('[data-act="back"]').hidden, skipShown: !d.querySelector('[data-act="skip"]').hidden,
       spotShown: !s.hidden && sb.width > 0, targetVisible: !!want,
       spotOnTarget: !!want && Math.abs(sb.left - (want.left - 6)) < 2 && Math.abs(sb.top - (want.top - 6)) < 2 &&
                     Math.abs(sb.right - (want.right + 6)) < 2 && Math.abs(sb.bottom - (want.bottom + 6)) < 2,
       targetInView: !!want && want.top >= 0 && want.top < w.innerHeight,
-      // a target taller than the space left beside the bubble cannot be shown whole
-      targetFits: !!want && want.bottom - want.top <= w.innerHeight - box($('guide')).height - 48,
-      tilt: g.style.getPropertyValue('--guide-tilt'), lookY: g.style.getPropertyValue('--guide-look-y'),
+      // a target taller than the space left beside him and his bubble cannot be shown whole
+      targetFits: !!want && want.bottom - want.top <= w.innerHeight - box($('guideBubble')).height - box($('guideAvatar')).height - 48,
+      facing: g.dataset.facing, flip: w.getComputedStyle(d.querySelector('.guide-flip')).transform,
+      targetLeftOfFox: !!want && (want.left + want.right) / 2 < (box($('guideAvatar')).left + box($('guideAvatar')).right) / 2,
+      foxInWindow: inWindow(box($('guideAvatar'))), bubbleInWindow: inWindow(box($('guideBubble'))),
+      foxOverBubble: overlap(box($('guideAvatar')), box($('guideBubble'))),
+      rects: {target: want, fox: box($('guideAvatar')), bubble: box($('guideBubble')), win: [cw(), w.innerHeight], scrollY: w.scrollY},
       bubbleCoversTarget: !!want && (overlap(box($('guideBubble')), want) || overlap(box($('guideAvatar')), want)),
       focusOnNext: d.activeElement === d.querySelector('[data-act="next"]'),
     });
@@ -97,17 +119,25 @@ async function main() {
   if (reducedRun) {
     out.reduced = {matches: w.matchMedia('(prefers-reduced-motion: reduce)').matches, state: $('guide').dataset.state,
                    typed: text('.guide-typed'), spoken: text('.guide-sr'),
-                   animation: w.getComputedStyle(d.querySelector('.guide-drone')).animationName,
-                   beacon: w.getComputedStyle(d.querySelector('.guide-beacon')).animationName};
+                   animation: w.getComputedStyle(d.querySelector('.guide-bobber')).animationName,
+                   sway: w.getComputedStyle(d.querySelector('.guide-sway')).animationName,
+                   beacon: w.getComputedStyle(d.querySelector('.guide-beacon')).animationName,
+                   transition: w.getComputedStyle($('guide')).transitionProperty, pose: pose()};
     d.querySelector('[data-act="next"]').click(); await sleep(50);
-    out.reduced.step2 = {state: $('guide').dataset.state, typed: text('.guide-typed'), spoken: text('.guide-sr')};
+    out.reduced.step2 = {state: $('guide').dataset.state, typed: text('.guide-typed'), spoken: text('.guide-sr'), pose: pose()};
     return;
   }
   out.idleAnimation = null;
   await walkTour(out.steps);
+  await sleep(800);                                    // he flies back to where he stands
   out.afterFinish = {bubbleOpen: bubbleOpen(), spotHidden: $('guideSpot').hidden, state: $('guide').dataset.state,
                      seen: w.localStorage.getItem('estd.guide.tutorialSeen'), guideShown: visible($('guideAvatar')),
-                     idleAnimation: w.getComputedStyle(d.querySelector('.guide-drone')).animationName,
+                     idleAnimation: w.getComputedStyle(d.querySelector('.guide-bobber')).animationName,
+                     swayAnimation: w.getComputedStyle(d.querySelector('.guide-sway')).animationName, pose: pose(),
+                     fox: box($('guideAvatar')), win: {w: cw(), h: w.innerHeight},
+                     overChart: overlap(box($('guideAvatar')), box($('chart'))), overCard: overlap(box($('guideAvatar')), box($('card'))),
+                     background: w.getComputedStyle($('guideAvatar')).backgroundColor, borderWidth: w.getComputedStyle($('guideAvatar')).borderTopWidth,
+                     shadow: w.getComputedStyle(d.querySelector('.guide-flip')).filter,
                      toggle: text('#guideToggle'), replay: text('#guideReplay'), pressed: $('guideToggle').getAttribute('aria-pressed'),
                      avatarLabel: $('guideAvatar').getAttribute('aria-label'), cardShown: !$('card').classList.contains('hidden'),
                      avatarWidth: box($('guideAvatar')).width};
@@ -162,23 +192,69 @@ async function main() {
   d.querySelector('[data-act="skip"]').click(); await sleep(50);
   out.replay.skipped = !bubbleOpen() && $('guideSpot').hidden;
 
-  // ---- narrow window: small icon when idle; during the tour the bubble keeps off the chart and the card
-  f.width = 390; await sleep(300);
-  out.narrow = {width: w.innerWidth, avatarWidth: box($('guideAvatar')).width, bubbleOpen: bubbleOpen(), steps: [],
-                bodyPadding: w.getComputedStyle(d.body).paddingBottom};
+  // ---- drag with the mouse (pointer events), arrow keys, and the saved position
+  const av = () => $('guideAvatar'), savedPos = () => JSON.parse(w.localStorage.getItem('estd.guide.pos') || 'null');
+  const ptr = (type, x, y) => av().dispatchEvent(new w.PointerEvent(type, {bubbles: true, cancelable: true, pointerId: 1,
+    pointerType: 'mouse', isPrimary: true, clientX: x, clientY: y, button: 0, buttons: type === 'pointerup' ? 0 : 1}));
+  const b0 = box(av()), cx = b0.left + b0.width / 2, cy = b0.top + b0.height / 2;
+  ptr('pointerdown', cx, cy); ptr('pointermove', cx - 20, cy - 100); ptr('pointermove', cx - 40, cy - 200);
+  const during = box(av()).top;
+  ptr('pointerup', cx - 40, cy - 200); await sleep(700);
+  const b1 = box(av());
+  out.drag = {dx: b1.left - b0.left, dy: b1.top - b0.top, during: during - b0.top, saved: savedPos(), bubbleOpen: bubbleOpen()};
+  av().focus();
+  const key = k => av().dispatchEvent(new w.KeyboardEvent('keydown', {key: k, bubbles: true, cancelable: true}));
+  key('ArrowRight'); await sleep(700);
+  const b2 = box(av()); key('ArrowDown'); await sleep(700); const b3 = box(av());
+  out.keys = {dx: b2.left - b1.left, dy: b3.top - b2.top, saved: savedPos()};
+
+  // a saved position over the chart is nudged to a free edge (the saved value itself stays as it was)
+  w.localStorage.setItem('estd.guide.pos', JSON.stringify({x: 0.5, y: 0.5}));
+  await load(); await sleep(900);
+  let bn = box(av());
+  out.nudge = {overChart: overlap(bn, box($('chart'))), saved: w.localStorage.getItem('estd.guide.pos'), inWindow: inWindow(bn),
+               atEdge: bn.left <= 0 || bn.right >= cw() || bn.top <= 0 || bn.bottom >= w.innerHeight - 1};
+  $('demos').querySelectorAll('button')[0].click();
+  await waitFor(() => !$('card').classList.contains('hidden')); await sleep(900);
+  bn = box(av());
+  out.nudge.withCard = {overChart: overlap(bn, box($('chart'))), overCard: overlap(bn, box($('card')))};
+  w.localStorage.removeItem('estd.guide.pos');
+
+  // resizing keeps him inside the window, in width and in height
+  await load(); await sleep(500);
+  await resize(800, 500);
+  out.resized = {fox: box(av()), win: {w: cw(), h: w.innerHeight}, inWindow: inWindow(box(av()))};
+  await resize(1300, 860);
+
+  // the tuck control: only his head, remembered
+  $('guideTuck').click(); await sleep(700);
+  const t1 = box(av());
+  out.tuck = {tucked: $('guide').dataset.tucked, stored: w.localStorage.getItem('estd.guide.tucked'), width: t1.width, height: t1.height,
+              label: $('guideTuck').getAttribute('aria-label'), pose: pose(), inWindow: inWindow(t1)};
+  $('guideTuck').click(); await sleep(700);
+  out.tuck.back = {tucked: $('guide').dataset.tucked, stored: w.localStorage.getItem('estd.guide.tucked'), height: box(av()).height};
+  w.localStorage.removeItem('estd.guide.tucked');
+
+  // ---- narrow window: just his head when idle; during the tour the bubble keeps off the chart and the card
+  await load(); await sleep(500);
+  await resize(390, 860);
+  out.narrow = {width: w.innerWidth, avatarWidth: box($('guideAvatar')).width, avatarHeight: box($('guideAvatar')).height,
+                tucked: $('guide').dataset.tucked, bubbleOpen: bubbleOpen(), steps: []};
   $('guideReplay').click(); await sleep(100);
   await walkTour(out.narrow.steps);
-  f.width = 1300; await sleep(200);
+  await resize(1300, 860);
+  out.narrow.wideAgain = {tucked: $('guide').dataset.tucked, avatarWidth: box($('guideAvatar')).width};
 
-  // ---- failures: the guide's files missing or broken -> the page works, nothing in the console
+  // ---- failures: the guide's files (or his pictures) missing or broken -> the page works, nothing in the console
   out.failures = {};
-  for (const mode of ['missing', 'broken', 'nostorage']) {
+  for (const mode of ['missing', 'broken', 'nostorage', 'noimages']) {
     await post('/__harness/mode/' + mode);
     await load(); await sleep(500);
     $('demos').querySelectorAll('button')[1].click();
     const card = await waitFor(() => !$('card').classList.contains('hidden'));
     out.failures[mode] = {card, title: $('cardTitle').textContent, guide: !!$('guide'), controls: $('guideControls').children.length,
-                          tipsShown: [...d.querySelectorAll('button.tip')].filter(visible).length};
+                          tipsShown: [...d.querySelectorAll('button.tip')].filter(visible).length,
+                          art: $('guide') ? $('guide').dataset.art : null, drone: $('guide') ? visible(d.querySelector('.guide-drone-svg')) : null};
   }
   await post('/__harness/mode/normal');
 }

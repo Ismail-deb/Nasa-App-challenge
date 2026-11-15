@@ -68,6 +68,13 @@ def site():
             js = ("Object.defineProperty(window, 'localStorage', {get() { throw new Error('blocked'); }});\n" + js)
         return Response(js, media_type="text/javascript", headers=main.NO_CACHE)
 
+    @outer.get("/static/guide/assets/{name}")
+    def guide_art(name: str):
+        """The guide's pictures, or nothing at all, to check that the drone takes over."""
+        if mode["guide"] == "noimages":
+            return Response(status_code=404)
+        return FileResponse(common.ROOT / "web" / "guide" / "assets" / name, headers=main.NO_CACHE)
+
     @outer.get("/frontend/config.local.js")
     def no_token():
         """Never the real token in tests: the globe always sees an empty one (offline mode)."""
@@ -180,14 +187,25 @@ def test_first_visit_starts_the_tutorial_and_every_step_highlights_its_element(g
         assert seen["progress"] == f"Step {i + 1} of 7"
         assert seen["targetVisible"] and seen["spotShown"] and seen["spotOnTarget"] and seen["targetInView"], seen
         assert seen["stateAtStart"] == "talking" and seen["typedAtStart"] != seen["typed"], seen   # typewriter
-        assert seen["stateAfter"] == "pointing" and seen["tilt"].endswith("deg"), seen
+        assert seen["poseAtStart"] == "talking" and seen["poseAfter"] == "pointing", seen         # the pictures swap with the state
+        assert seen["stateAfter"] == "pointing", seen
+        # he points toward the highlighted element: flipped exactly when it is to his left
+        assert seen["facing"] == ("left" if seen["targetLeftOfFox"] else "right"), seen
+        assert seen["flip"] == ("matrix(-1, 0, 0, 1, 0, 0)" if seen["facing"] == "left" else "none"), seen
+        assert seen["foxInWindow"] and seen["bubbleInWindow"] and not seen["foxOverBubble"], seen
         assert seen["skipShown"] and seen["backShown"] == (i > 0) and seen["focusOnNext"], seen
         assert seen["next"] == ("Finish" if i == 6 else "Next")
     assert name in out["steps"][0]["spoken"]                                # introduces itself by name
     assert not any(seen["bubbleCoversTarget"] for seen in out["steps"])     # never on top of what it explains
     after = out["afterFinish"]
     assert not after["bubbleOpen"] and after["spotHidden"] and after["state"] == "idle"
-    assert after["idleAnimation"] == "guide-bob" and after["guideShown"] and after["cardShown"]
+    assert after["idleAnimation"] == "guide-bob" and after["swayAnimation"] == "guide-sway" and after["pose"] == "neutral"
+    assert after["guideShown"] and after["cardShown"]
+    # back at his saved place (bottom-right, slightly over the edge), keeping off the chart and the card
+    assert after["fox"]["right"] >= after["win"]["w"] and abs(after["fox"]["bottom"] - after["win"]["h"]) <= 2, after["fox"]
+    assert not after["overChart"] and not after["overCard"], after
+    # a cut-out: no panel, background or border, only a drop-shadow
+    assert after["background"] == "rgba(0, 0, 0, 0)" and after["borderWidth"] == "0px" and "drop-shadow" in after["shadow"], after
     assert after["seen"] == "1"
 
 
@@ -224,18 +242,51 @@ def test_question_mark_tips_make_the_guide_explain(guide_run):
     assert out["greeting"]["open"] and name in out["greeting"]["spoken"] and out["greeting"]["closed"]
 
 
-def test_narrow_window_collapses_the_guide_to_a_small_icon(guide_run):
+def test_narrow_window_collapses_him_to_his_head(guide_run):
     out = guide_run
     assert out["afterFinish"]["avatarWidth"] >= 70                       # full size in a wide window
     narrow = out["narrow"]
-    assert narrow["width"] <= 400 and narrow["avatarWidth"] <= 48 and not narrow["bubbleOpen"]
-    assert narrow["bodyPadding"] == "60px"                               # room to scroll content clear of the icon
+    assert narrow["width"] <= 400 and narrow["tucked"] == "true" and not narrow["bubbleOpen"]
+    assert narrow["avatarWidth"] <= 90 and narrow["avatarHeight"] < narrow["avatarWidth"]       # just his head
+    assert narrow["wideAgain"]["tucked"] == "false" and narrow["wideAgain"]["avatarWidth"] >= 100  # back in a wide window
     assert len(narrow["steps"]) == 7
     for seen in narrow["steps"]:
         assert seen["spotShown"] and seen["spotOnTarget"] and seen["targetInView"], seen
+        assert seen["foxInWindow"] and seen["bubbleInWindow"], seen
         # the bubble stays off what it explains, unless that is taller than the window has room for
         assert not seen["bubbleCoversTarget"] or not seen["targetFits"], seen
     assert not next(s for s in narrow["steps"] if s["id"] == "chart")["bubbleCoversTarget"]
+
+
+def test_he_can_be_dragged_moved_by_keys_and_remembers_where_he_stands(guide_run):
+    out = guide_run
+    drag = out["drag"]
+    assert abs(drag["during"] + 200) <= 3, drag                            # follows the pointer while dragging
+    assert abs(drag["dx"] + 40) <= 3 and abs(drag["dy"] + 200) <= 3, drag    # and stays where he was dropped
+    assert 0 <= drag["saved"]["x"] <= 1 and 0 <= drag["saved"]["y"] < 1 and not drag["bubbleOpen"], drag
+    keys = out["keys"]
+    assert abs(keys["dx"] - 16) <= 3 and abs(keys["dy"] - 16) <= 3, keys     # arrow keys: 16 px steps
+    assert keys["saved"] != drag["saved"]
+
+
+def test_a_saved_position_over_the_chart_is_nudged_to_a_free_edge(guide_run):
+    n = guide_run["nudge"]
+    assert not n["overChart"] and n["atEdge"] and n["inWindow"], n
+    assert n["saved"] == '{"x":0.5,"y":0.5}', n                              # the saved position itself is not changed
+    assert not n["withCard"]["overChart"] and not n["withCard"]["overCard"], n   # and he keeps off the result card too
+
+
+def test_he_stays_inside_the_window_when_it_is_resized(guide_run):
+    r = guide_run["resized"]
+    assert r["inWindow"] and r["win"]["w"] <= 810 and r["win"]["h"] <= 510, r
+
+
+def test_tuck_control_shows_only_his_head_and_is_remembered(guide_run):
+    name, _, _ = _guide_config()
+    t = guide_run["tuck"]
+    assert t["tucked"] == "true" and t["stored"] == "yes" and t["height"] < t["width"] and t["inWindow"], t
+    assert t["label"] == f"Bring {name} back" and t["pose"] == "neutral", t
+    assert t["back"]["tucked"] == "false" and t["back"]["stored"] == "no" and t["back"]["height"] > t["width"], t
 
 
 def test_page_works_without_the_guide(guide_run):
@@ -244,6 +295,7 @@ def test_page_works_without_the_guide(guide_run):
         assert f[mode]["card"] and f[mode]["title"], f[mode]
         assert not f[mode]["guide"] and f[mode]["controls"] == 0 and f[mode]["tipsShown"] == 0, f[mode]
     assert f["nostorage"]["card"] and f["nostorage"]["guide"]             # localStorage blocked: still fine
+    assert f["noimages"]["card"] and f["noimages"]["art"] == "drone" and f["noimages"]["drone"], f["noimages"]   # pictures missing: the drone
 
 
 def test_reduced_motion_means_no_animation_and_instant_text(site, tmp_path):
@@ -254,7 +306,9 @@ def test_reduced_motion_means_no_animation_and_instant_text(site, tmp_path):
     r = out["reduced"]
     assert out["firstVisitStarted"] and r["matches"]
     assert r["typed"] == r["spoken"] == _said(steps[0]["text"], name) and r["state"] != "talking"
-    assert r["animation"] == "none" and r["beacon"] == "none"
+    assert r["animation"] == "none" and r["sway"] == "none" and r["beacon"] == "none"      # no bobbing, tilting or pulsing
+    assert r["transition"] == "none"                                                       # no flying: he jumps
+    assert r["pose"] == "pointing" and r["step2"]["pose"] == "pointing"                    # the pose swaps still happen
     assert r["step2"]["typed"] == _said(steps[1]["text"], name) and r["step2"]["state"] != "talking"
 
 

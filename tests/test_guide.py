@@ -33,7 +33,7 @@ PAGE_IDS = set(re.findall(r'\bid="([^"]+)"', PAGE))
 # ---------------------------------------------------------------- the name, defined once
 
 def test_guide_name_is_defined_exactly_once():
-    assert NAME == "Orbit"
+    assert NAME == "Comet"
     assert len(re.findall(r"\bGUIDE_NAME\s*=", CONFIG)) == 1
     assert "GUIDE_NAME =" not in GUIDE_JS.replace("NAME = GUIDE_NAME", "") and "GUIDE_NAME =" not in PAGE
 
@@ -41,7 +41,7 @@ def test_guide_name_is_defined_exactly_once():
 def test_guide_name_is_hardcoded_nowhere_else():
     """The literal name appears on the one config line and in no other file the app serves or runs."""
     assert CONFIG.count(NAME) == 1 and f'const GUIDE_NAME = "{NAME}";' in CONFIG
-    files = [p for p in WEB.rglob("*") if p.is_file()] + list((common.ROOT / "app").glob("*.py"))
+    files = [p for p in WEB.rglob("*") if p.is_file() and p.suffix != ".webp"] + list((common.ROOT / "app").glob("*.py"))
     files += [common.ROOT / n for n in ("lenses.yml", "presets.yml", "catalog.yml")]
     for path in files:
         if path.name == "config.js":
@@ -122,11 +122,12 @@ def test_first_visit_logic_and_persisted_toggle():
 def test_three_animation_states_and_reduced_motion():
     for state in ("idle", "talking", "pointing"):
         assert f'.guide[data-state="{state}"]' in GUIDE_CSS
-    assert "@keyframes guide-bob" in GUIDE_CSS and "@keyframes guide-pulse" in GUIDE_CSS
+    assert "@keyframes guide-bob" in GUIDE_CSS and "@keyframes guide-sway" in GUIDE_CSS      # bob + occasional tilt
+    assert "@keyframes guide-pulse" in GUIDE_CSS                                            # the drone fallback's light
     reduced = GUIDE_CSS.split("@media (prefers-reduced-motion: reduce)")[1].split("}")[0]
     assert "animation: none !important" in reduced and "transition: none !important" in reduced
     assert "(prefers-reduced-motion: reduce)" in GUIDE_JS and "if (reduced())" in GUIDE_JS
-    assert "@media (max-width: 1200px)" in GUIDE_CSS                    # collapses to a small icon
+    assert "@media (max-width: 700px)" in GUIDE_CSS                     # starts as just his head
 
 
 def test_no_voice_no_video_no_third_party_code():
@@ -154,3 +155,97 @@ def test_guide_files_are_served_fresh():
         r = c.get(path)
         assert r.status_code == 200 and r.headers["cache-control"] == "no-cache", path
     assert f'const GUIDE_NAME = "{NAME}";' in c.get("/static/guide/config.js").text
+
+
+# ---------------------------------------------------------------- the character (three transparent poses)
+
+POSES = ("neutral", "talking", "pointing")
+IMAGES = _const("GUIDE_IMAGES")
+
+
+def _webp_info(path):
+    """(width, height, has_alpha) of a WebP file, read from its VP8X header (no image library needed)."""
+    import struct
+    b = path.read_bytes()
+    assert b[:4] == b"RIFF" and b[8:12] == b"WEBP", f"{path.name} is not a WebP file"
+    assert b[12:16] == b"VP8X", f"{path.name} has no extended header, so no transparency"
+    return (1 + int.from_bytes(b[24:27], "little"), 1 + int.from_bytes(b[27:30], "little"), bool(b[20] & 0x10))
+
+
+def test_three_poses_are_configured_once_and_the_files_exist():
+    assert set(IMAGES) == set(POSES)
+    assert len(re.findall(r"\bGUIDE_IMAGES\s*=", CONFIG)) == 1
+    for pose in POSES:
+        url = IMAGES[pose]
+        assert url.startswith("/static/guide/assets/") and url.endswith(".webp"), url
+        assert (WEB / url.removeprefix("/static/")).is_file(), url
+    for path in (GUIDE_JS, GUIDE_CSS, PAGE):                           # the addresses live in config.js only
+        assert "assets/" not in path
+
+
+def test_poses_are_transparent_and_share_one_canvas_size():
+    """Same width and height for all three, with an alpha channel: swapping them cannot make him jump
+    and nothing (no panel, no background) is baked into the picture."""
+    infos = {pose: _webp_info(WEB / IMAGES[pose].removeprefix("/static/")) for pose in POSES}
+    assert len({(w, h) for w, h, _ in infos.values()}) == 1, infos
+    assert all(alpha for _, _, alpha in infos.values()), infos
+
+
+def test_he_is_free_floating_with_no_panel_and_only_a_drop_shadow():
+    block = GUIDE_CSS.split(".guide-avatar {")[1].split("}")[0]
+    assert "background: none" in block and "border: 0" in block and "box-shadow: none" in block
+    assert "drop-shadow(" in GUIDE_CSS.split(".guide-flip {")[1].split("}")[0]
+    root = GUIDE_CSS.split(".guide { position: fixed;")[1].split("}")[0]
+    assert "pointer-events: none" in root and "z-index" in root           # only he (and his bubble) take clicks
+    assert ".guide > * { pointer-events: auto; }" in GUIDE_CSS
+    assert "touch-action: none" in block                                  # touch dragging
+
+
+def test_poses_are_preloaded_stacked_and_flip_toward_the_target():
+    assert "POSES.map(function (p)" in GUIDE_JS and "data-pose=" in GUIDE_JS        # all three are in the page from the start
+    assert "grid-area: 1 / 1" in GUIDE_CSS                                          # stacked in one cell
+    for state, pose in (("idle", "neutral"), ("talking", "talking"), ("pointing", "pointing")):
+        assert f'.guide[data-state="{state}"] .guide-img[data-pose="{pose}"]' in GUIDE_CSS
+    assert 'root.dataset.facing = r && (r.left + r.right) / 2 < fox.x + d.w / 2 ? \'left\' : \'right\';' in GUIDE_JS
+    assert '.guide[data-art="fox"][data-facing="left"] .guide-flip { transform: scaleX(-1); }' in GUIDE_CSS
+
+
+def test_drone_is_the_fallback_when_a_picture_fails():
+    assert "root.dataset.art = haveArt ? 'fox' : 'drone';" in GUIDE_JS
+    assert "on(img, 'error', function () { root.dataset.art = 'drone';" in GUIDE_JS
+    assert 'class="guide-drone-svg"' in GUIDE_JS and '.guide[data-art="drone"] .guide-img { display: none; }' in GUIDE_CSS
+
+
+def test_position_is_saved_clamped_and_movable_by_mouse_touch_and_keys():
+    assert "var KEY_POS = 'estd.guide.pos';" in GUIDE_JS and "store.set(KEY_POS," in GUIDE_JS
+    assert "clamp(+p.x, 0, 1)" in GUIDE_JS and "OVER" in GUIDE_JS                    # shares of the free area: always inside the window
+    for event in ("pointerdown", "pointermove", "pointerup", "pointercancel"):       # one path for mouse, touch and pen
+        assert f"'{event}'" in GUIDE_JS, event
+    assert "e.key === 'ArrowLeft'" in GUIDE_JS and "e.key === 'ArrowDown'" in GUIDE_JS
+    assert "on(window, 'resize'" in GUIDE_JS
+
+
+def test_he_keeps_off_the_chart_card_and_globe_while_idle():
+    assert "var AVOID = ['#chart', '#card', '#globePanel', '#viewToggle'];" in GUIDE_JS
+    assert 'id="chart"' in PAGE and 'id="card"' in PAGE
+    assert "nudge(toPx(saved, d), d)" in GUIDE_JS                                    # the saved position itself is not changed
+    assert "new MutationObserver(" in GUIDE_JS
+
+
+def test_tuck_control_and_narrow_default():
+    assert "var NARROW = 700;" in GUIDE_JS and "vw() <= NARROW" in GUIDE_JS
+    assert 'class="guide-tuck" id="guideTuck"' in GUIDE_JS and "var KEY_TUCK = 'estd.guide.tucked';" in GUIDE_JS
+    assert '[data-tucked="true"] .guide-avatar { aspect-ratio: 460 / 290; overflow: hidden; }' in GUIDE_CSS   # head only
+
+
+def test_he_flies_during_the_tour_and_jumps_with_reduced_motion():
+    assert ".guide.guide-fly { transition: left .45s ease, top .45s ease; }" in GUIDE_CSS
+    reduced = GUIDE_CSS.split("@media (prefers-reduced-motion: reduce)")[1].split("}")[0]
+    assert ".guide *" in reduced and "transition: none !important" in reduced and "animation: none !important" in reduced
+    assert "planTour(r, d)" in GUIDE_JS and "closeBubble" in GUIDE_JS
+
+
+def test_readme_credits_the_artwork_and_documents_the_name():
+    readme = (common.ROOT / "README.md").read_text(encoding="utf-8")
+    assert "Guide artwork generated with AI" in readme
+    assert "Orbit" not in readme
