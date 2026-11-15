@@ -8,7 +8,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 const out = {errors: []};
 const post = (path, body) => fetch(path, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body || {})});
 const f = document.getElementById('f');
-let d, w, $, starts = 0, poses = new Set(), flips = new Set(), places = new Set();
+let d, w, $, starts = 0, poses = new Set(), flips = new Set(), places = new Set(), plans = new Set();
 
 const waitFor = async (fn, ms = 8000) => {
   for (let t = 0; t < ms; t += 25) { try { if (fn()) return true; } catch (e) {} await sleep(25); }
@@ -28,15 +28,18 @@ async function load(query) {
   await waitFor(() => $('guide') && d.querySelectorAll('#demos button').length > 0);
   starts = 0;
   // count dance starts, and note what he looks like and where he stands while dancing
+  let was = false;
   new w.MutationObserver(() => {
-    const g = $('guide');
-    if (!g.classList.contains('guide-dancing')) return;
-    if (g.dataset.beat === '0') starts += 1;
+    const g = $('guide'), now = g.classList.contains('guide-dancing');
+    if (now && !was) starts += 1;
+    was = now;
+    if (!now) return;
+    plans.add(g.dataset.dancePlan);
     const img = [...d.querySelectorAll('.guide-img')].find(x => w.getComputedStyle(x).opacity === '1');
     poses.add(img ? img.dataset.pose : null);
     flips.add(w.getComputedStyle(d.querySelector('.guide-sway')).transform);
     places.add(g.style.left + ',' + g.style.top);
-  }).observe($('guide'), {attributes: true, attributeFilter: ['class', 'data-beat']});
+  }).observe($('guide'), {attributes: true, attributeFilter: ['class', 'data-dance-pose', 'data-flip']});
 }
 const dancing = () => $('guide').classList.contains('guide-dancing');
 const bubbleOpen = () => !$('guideBubble').hidden;
@@ -47,14 +50,34 @@ const bubbleOpen = () => !$('guideBubble').hidden;
     await post('/__harness/mode/fastdance');
     await load();
 
+    // 0. every pose is placed by its feet: with animations stopped, each picture's feet (its left edge plus
+    //    feet_anchor_x at its drawn scale) are at the same x as neutral's
+    const manifest = await (await fetch('/static/guide/assets/comet-poses.json')).json();
+    await waitFor(() => $('guide').dataset.poses === 'placed');
+    const still = d.createElement('style');
+    still.textContent = '.guide * { animation: none !important; }';
+    d.head.appendChild(still);
+    const feet = {};
+    d.querySelectorAll('.guide-img').forEach(img => {
+      const b = img.getBoundingClientRect(), m = manifest[img.dataset.pose];
+      feet[img.dataset.pose] = {x: b.left + m.feet_anchor_x * b.width / m.width, bottom: b.bottom};
+    });
+    const box = $('guideAvatar').getBoundingClientRect();
+    out.align = {placed: $('guide').dataset.poses, feet, box: {left: box.left, width: box.width, bottom: box.bottom},
+                 anchor: box.left + manifest.neutral.feet_anchor_x * box.width / manifest.neutral.width};
+    still.remove();
+
     // 1. idle: he dances, in place, through every beat, and ends at rest
     const rest = $('guide').style.left + ',' + $('guide').style.top;
     out.started = await waitFor(dancing, 10000);
     out.ended = await waitFor(() => !dancing(), 10000);
     await sleep(100);
-    out.first = {poses: [...poses].sort(), flips: [...flips].sort(), places: [...places], rest,
+    out.first = {poses: [...poses].sort(), flips: [...flips].sort(), places: [...places], rest, plans: [...plans],
                  restAfter: $('guide').style.left + ',' + $('guide').style.top, state: $('guide').dataset.state,
-                 beatLeft: 'beat' in $('guide').dataset, button: $('guideDance').textContent,
+                 leftover: ['dancePose', 'flip', 'dancePlan'].filter(k => k in $('guide').dataset),
+                 pose: [...d.querySelectorAll('.guide-img')].filter(x => w.getComputedStyle(x).opacity === '1').map(x => x.dataset.pose),
+                 avatar: {w: $('guideAvatar').getBoundingClientRect().width, h: $('guideAvatar').getBoundingClientRect().height},
+                 button: $('guideDance').textContent,
                  pressed: $('guideDance').getAttribute('aria-pressed')};
 
     // 2. a drag (pointerdown on him) cancels a dance at once

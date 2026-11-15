@@ -51,7 +51,7 @@ def test_guide_name_is_hardcoded_nowhere_else():
     files = [p for p in WEB.rglob("*") if p.is_file() and p.suffix not in (".webp", ".woff2")] + list((common.ROOT / "app").glob("*.py"))
     files += [common.ROOT / n for n in ("lenses.yml", "presets.yml", "catalog.yml")]
     for path in files:
-        if path.name == "config.js":
+        if path.name in ("config.js", "comet-poses.json"):                # (the manifest lists the pictures' file names)
             continue
         assert not re.search(NAME, path.read_text(encoding="utf-8"), re.I), f"{path.name} hardcodes the guide's name"
 
@@ -168,7 +168,7 @@ DANCE = _const("GUIDE_DANCE")
 
 def test_dance_timing_comes_from_the_config():
     assert DANCE == {"idleSeconds": 15, "quietSeconds": 10, "repeatMinSeconds": 45, "repeatMaxSeconds": 90,
-                     "durationSeconds": 3}
+                     "durationSeconds": 4}
     assert len(re.findall(r"\bGUIDE_DANCE\s*=", CONFIG)) == 1
     for key in DANCE:
         assert f"ms('{key}')" in GUIDE_JS, key
@@ -204,14 +204,36 @@ def test_calm_and_reduced_motion_turn_the_dance_off_and_it_has_a_switch():
     assert ".guide *" in reduced and "animation: none !important" in reduced
 
 
-def test_dance_stays_in_place_and_small():
+def test_dance_stays_in_place_hops_low_and_flips_about_his_feet():
     keys = GUIDE_CSS.split("@keyframes guide-dance {")[1].split("\n}")[0]
-    moves = [(abs(float(x)), abs(float(y))) for x, y in re.findall(r"translate\((-?[\d.]+)px, (-?[\d.]+)px\)", keys)]
-    assert moves and max(y for _, y in moves) <= 12 and 2 * max(x for x, _ in moves) <= 10, moves
-    assert "left" not in keys and "top" not in keys                                    # transforms only
-    dance = GUIDE_JS.split("function dance() {")[1].split("\n    }")[0]
-    assert "style.left" not in dance and "style.top" not in dance
-    assert '.guide.guide-dancing[data-beat="1"] .guide-sway' in GUIDE_CSS and "scaleX(-1)" in GUIDE_CSS
+    hops = [abs(float(y)) for y in re.findall(r"translateY\((-?[\d.]+)(?:px)?\)", keys)]
+    assert hops and max(hops) <= 12, hops
+    assert "translateX" not in keys and "left" not in keys and "top" not in keys          # up and down only
+    assert "var DANCE_HOP = 12;" in GUIDE_JS                                             # the keep-clear check uses the same
+    dance = GUIDE_JS.split("function dance() {")[1].split("\n    }\n")[0]
+    assert "style.left" not in dance and "style.top" not in dance                       # he never moves
+    assert '.guide.guide-dancing[data-flip="yes"] .guide-sway { transform: scaleX(-1); }' in GUIDE_CSS
+    assert "transform-origin: var(--guide-feet, 50%) 100%" in GUIDE_CSS                  # flipped about his feet
+    steps = GUIDE_JS.split("var DANCE_STEPS = [")[1].split("];")[0]
+    assert re.findall(r"pose: '(\w+)'", steps) == ["neutral", "cheer", "dance", "cheer", "dance", "neutral"]
+    assert steps.count("flip: true") == 2
+
+
+def test_dance_keeps_the_wide_pose_off_the_chart_card_and_globe():
+    plan = GUIDE_JS.split("function danceSteps() {")[1].split("\n    }")[0]
+    assert "if (clearOfPage(DANCE_STEPS)) return DANCE_STEPS;" in plan
+    assert "st.pose === 'dance' ? { pose: 'cheer', flip: st.flip } : st" in plan        # otherwise cheer only
+    assert "return clearOfPage(cheer) ? cheer : null;" in plan                           # or no dance at all
+    assert "var rs = avoidRects();" in GUIDE_JS.split("function clearOfPage(steps) {")[1].split("\n    }")[0]
+    assert "var AVOID = ['#chart', '#card', '#globePanel', '#viewToggle'];" in GUIDE_JS
+
+
+def test_dance_needs_its_pictures_and_the_manifest_and_skips_silently():
+    idle = GUIDE_JS.split("function idleNow() {")[1].split("\n    }")[0]
+    assert "!!poses && danceArtOk && root.dataset.art === 'fox'" in idle
+    assert "on(img, 'error', function () { danceArtOk = false; stopDance(); });" in GUIDE_JS
+    assert ".guide-img:not(.guide-img-extra)" in GUIDE_JS                                # only the everyday poses bring the drone
+    assert ".catch(function () { /* no manifest: no dance */ });" in GUIDE_JS
 
 
 def test_three_animation_states_and_reduced_motion():
@@ -255,6 +277,8 @@ def test_guide_files_are_served_fresh():
 # ---------------------------------------------------------------- the character (three transparent poses)
 
 POSES = ("neutral", "talking", "pointing")
+EXTRA = ("cheer", "dance")                                             # the idle dance's poses
+MANIFEST = json.loads((WEB / "guide" / "assets" / "comet-poses.json").read_text(encoding="utf-8"))
 IMAGES = _const("GUIDE_IMAGES")
 
 
@@ -267,10 +291,10 @@ def _webp_info(path):
     return (1 + int.from_bytes(b[24:27], "little"), 1 + int.from_bytes(b[27:30], "little"), bool(b[20] & 0x10))
 
 
-def test_three_poses_are_configured_once_and_the_files_exist():
-    assert set(IMAGES) == set(POSES)
+def test_poses_are_configured_once_and_the_files_exist():
+    assert set(IMAGES) == set(POSES) | set(EXTRA)
     assert len(re.findall(r"\bGUIDE_IMAGES\s*=", CONFIG)) == 1
-    for pose in POSES:
+    for pose in IMAGES:
         url = IMAGES[pose]
         assert url.startswith("/static/guide/assets/") and url.endswith(".webp"), url
         assert (WEB / url.removeprefix("/static/")).is_file(), url
@@ -278,12 +302,35 @@ def test_three_poses_are_configured_once_and_the_files_exist():
         assert "assets/" not in path
 
 
-def test_poses_are_transparent_and_share_one_canvas_size():
-    """Same width and height for all three, with an alpha channel: swapping them cannot make him jump
-    and nothing (no panel, no background) is baked into the picture."""
-    infos = {pose: _webp_info(WEB / IMAGES[pose].removeprefix("/static/")) for pose in POSES}
-    assert len({(w, h) for w, h, _ in infos.values()}) == 1, infos
+def test_poses_are_transparent_and_match_the_manifest():
+    """Every picture has an alpha channel (nothing baked in behind him) and the size the manifest gives;
+    the three everyday poses share one canvas size."""
+    infos = {pose: _webp_info(WEB / IMAGES[pose].removeprefix("/static/")) for pose in IMAGES}
     assert all(alpha for _, _, alpha in infos.values()), infos
+    assert len({infos[p][:2] for p in POSES}) == 1, infos
+    for pose, (w, h, _) in infos.items():
+        assert (MANIFEST[pose]["width"], MANIFEST[pose]["height"]) == (w, h), pose
+        assert IMAGES[pose].endswith("/" + MANIFEST[pose]["file"]), pose
+
+
+def test_every_pose_is_placed_by_its_feet_from_the_manifest():
+    """Each picture's width and shift come from the manifest, as shares of his box (neutral's picture):
+    with them, every pose's feet land on the same point. No size or anchor is written in the code."""
+    assert _const("GUIDE_POSE_MANIFEST") == "/static/guide/assets/comet-poses.json"
+    place = GUIDE_JS.split("function placePoses(m) {")[1].split("\n    }\n")[0]
+    assert "var ref = m && m.neutral;" in place
+    assert "img.style.width = (100 * p.width / ref.width) + '%';" in place
+    assert "img.style.marginLeft = (100 * (ref.feet_anchor_x - p.feet_anchor_x) / ref.width) + '%';" in place
+    assert "root.style.setProperty('--guide-feet', (100 * ref.feet_anchor_x / ref.width) + '%');" in place
+    for p in MANIFEST.values():                                        # no picture size or anchor in the code
+        for n in (p["width"], p["feet_anchor_x"]):
+            assert not re.search(rf"(?<![\w.]){re.escape(str(n))}(?![\w.])", GUIDE_JS + GUIDE_CSS.split(".guide-avatar {")[0]), n
+    # the arithmetic itself: the feet of every pose land where neutral's are
+    ref = MANIFEST["neutral"]
+    for pose, p in MANIFEST.items():
+        width, shift = p["width"] / ref["width"], (ref["feet_anchor_x"] - p["feet_anchor_x"]) / ref["width"]
+        feet = shift + p["feet_anchor_x"] / p["width"] * width
+        assert abs(feet - ref["feet_anchor_x"] / ref["width"]) < 1e-12, pose
 
 
 def test_he_is_free_floating_with_no_panel_and_only_a_drop_shadow():
@@ -297,7 +344,7 @@ def test_he_is_free_floating_with_no_panel_and_only_a_drop_shadow():
 
 
 def test_poses_are_preloaded_stacked_and_flip_toward_the_target():
-    assert "POSES.map(function (p)" in GUIDE_JS and "data-pose=" in GUIDE_JS        # all three are in the page from the start
+    assert "POSES.concat(haveDanceArt ? EXTRA_POSES : []).map(function (p)" in GUIDE_JS and "data-pose=" in GUIDE_JS   # all in the page from the start
     assert "grid-area: 1 / 1" in GUIDE_CSS                                          # stacked in one cell
     for state, pose in (("idle", "neutral"), ("talking", "talking"), ("pointing", "pointing")):
         assert f'.guide[data-state="{state}"] .guide-img[data-pose="{pose}"]' in GUIDE_CSS

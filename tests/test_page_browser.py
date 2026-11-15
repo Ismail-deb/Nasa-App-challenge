@@ -67,7 +67,7 @@ def site():
             js = 'const GUIDE_NAME = "X"; const GUIDE_STEPS = null; const GUIDE_TIPS = 5;'
         if mode["guide"] == "fastdance":                    # the idle dance within seconds, not minutes
             js = re.sub(r"^const GUIDE_DANCE = .*;$", 'const GUIDE_DANCE = {"idleSeconds": 1, "quietSeconds": 0.5, '
-                        '"repeatMinSeconds": 1, "repeatMaxSeconds": 1.5, "durationSeconds": 1.2};', js, flags=re.M)
+                        '"repeatMinSeconds": 1, "repeatMaxSeconds": 1.5, "durationSeconds": 1.8};', js, flags=re.M)
         if mode["guide"] == "nostorage":
             js = ("Object.defineProperty(window, 'localStorage', {get() { throw new Error('blocked'); }});\n" + js)
         return Response(js, media_type="text/javascript", headers=main.NO_CACHE)
@@ -320,17 +320,25 @@ def test_reduced_motion_means_no_animation_and_instant_text(site, tmp_path):
 
 
 def test_idle_dance_runs_in_place_and_never_during_the_tour_or_a_bubble(site, tmp_path):
-    """With short timings from the config: he dances when idle, through all four beats (neutral and
-    talking pictures, flipped and not), without moving, and ends at rest; a drag cancels it; a bubble or
-    the tutorial keeps it off; the header button and ?calm=1 turn it off. Nothing in the console."""
+    """With short timings from the config: every pose's feet line up (placed from the manifest); he
+    dances when idle (neutral, cheer, dance, flipped on alternate beats, or cheer only where the wide pose
+    would reach the chart), without moving, and ends at rest; a drag cancels it; a bubble or the tutorial
+    keeps it off; the header button and ?calm=1 turn it off. Nothing in the console."""
     out = site("dance", tmp_path / "profile")
     assert out["errors"] == [], out["errors"]
+    a = out["align"]
+    assert a["placed"] == "placed" and set(a["feet"]) == {"neutral", "talking", "pointing", "cheer", "dance"}, a
+    for pose, f in a["feet"].items():
+        assert abs(f["x"] - a["anchor"]) <= 1 and abs(f["bottom"] - a["box"]["bottom"]) <= 1, (pose, a)
     assert out["started"] and out["ended"], out
     first = out["first"]
-    assert first["poses"] == ["neutral", "talking"], first
+    assert len(first["plans"]) == 1 and first["plans"][0] in ("full", "cheer"), first
+    wanted = ["cheer", "dance", "neutral"] if first["plans"] == ["full"] else ["cheer", "neutral"]
+    assert first["poses"] == wanted, first
     assert "none" in first["flips"] and any(t.startswith("matrix(-1") for t in first["flips"]), first
     assert first["places"] == [first["rest"]] and first["restAfter"] == first["rest"], first      # in place
-    assert first["state"] == "idle" and not first["beatLeft"], first
+    assert first["state"] == "idle" and first["leftover"] == [] and first["pose"] == ["neutral"], first
+    assert abs(first["avatar"]["w"] - a["box"]["width"]) < 1, first                                # his box never grew
     assert first["button"] == "Idle dance: on" and first["pressed"] == "true", first
     assert out["secondStarted"] and out["cancelledByDrag"], out
     assert out["whileBubble"] == {"open": True, "started": 0, "dancing": False}, out["whileBubble"]

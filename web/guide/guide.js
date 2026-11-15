@@ -9,7 +9,7 @@
    it works without it; nothing is ever written to the console.
 
    Texts, the guide's name and the picture addresses come from config.js
-   (GUIDE_NAME, GUIDE_IMAGES, GUIDE_STEPS, GUIDE_STEPS_GLOBE, GUIDE_TIPS, GUIDE_DANCE). */
+   (GUIDE_NAME, GUIDE_IMAGES, GUIDE_POSE_MANIFEST, GUIDE_STEPS, GUIDE_STEPS_GLOBE, GUIDE_TIPS, GUIDE_DANCE). */
 (function () {
   'use strict';
 
@@ -51,9 +51,15 @@
   var KEY_POS = 'estd.guide.pos';             // where he stands: {"x": 0..1, "y": 0..1} across the free area
   var KEY_TUCK = 'estd.guide.tucked';         // "yes" | "no" (missing = tucked only in a narrow window)
   var KEY_DANCE = 'estd.guide.dance';         // "on" | "off" (missing = on): the occasional idle dance
-  var DANCE_BEATS = 4;                         // the dance's beats: hop, flip and pose swap on each
+  // the dance: one pose per beat, flipped (about his feet) on alternate beats; it starts and ends at rest
+  var DANCE_STEPS = [
+    { pose: 'neutral' }, { pose: 'cheer' }, { pose: 'dance', flip: true },
+    { pose: 'cheer' }, { pose: 'dance', flip: true }, { pose: 'neutral' }
+  ];
+  var DANCE_HOP = 12;                          // px: the highest hop (the same as in guide.css)
 
   var POSES = ['neutral', 'talking', 'pointing'];
+  var EXTRA_POSES = ['cheer', 'dance'];          // only for the idle dance
   var OVER = 12;          // px he may stand past the window edge
   var MARGIN = 8;         // px kept free around the speech bubble
   var GAP = 12;           // px between him, his bubble and what he points at
@@ -125,8 +131,11 @@
     root.setAttribute('role', 'region');
     root.setAttribute('aria-label', NAME + ', the guide');
     // all three poses are in the page from the start (preloaded) and stacked; the state shows one
-    var pictures = haveArt ? POSES.map(function (p) {
-      return '<img class="guide-img" data-pose="' + p + '" src="' + IMAGES[p] + '" alt="" draggable="false">';
+    var haveDanceArt = haveArt && EXTRA_POSES.every(function (p) { return typeof IMAGES[p] === 'string' && IMAGES[p]; });
+    var MANIFEST = typeof GUIDE_POSE_MANIFEST === 'string' ? GUIDE_POSE_MANIFEST : '';
+    var pictures = haveArt ? POSES.concat(haveDanceArt ? EXTRA_POSES : []).map(function (p) {
+      return '<img class="guide-img' + (EXTRA_POSES.indexOf(p) >= 0 ? ' guide-img-extra' : '') + '" data-pose="' + p +
+             '" src="' + IMAGES[p] + '" alt="" draggable="false">';
     }).join('') : '';
     root.innerHTML =
       '<div class="guide-bubble" id="guideBubble" hidden>' +
@@ -180,6 +189,8 @@
     var danceOn = store.get(KEY_DANCE) !== 'off';
     var dancing = null;     // the running dance's timers, null when he is not dancing
     var lastInput = Date.now(), idleSince = null, nextDance = 0;
+    var poses = null;       // the manifest's poses, once every picture has been placed by it
+    var danceArtOk = haveDanceArt;   // false once cheer or dance fails to load: no dance, silently
     var tucked = (function () { var s = store.get(KEY_TUCK); return s === null ? vw() <= NARROW : s === 'yes'; })();
 
     function setState(s) { root.dataset.state = s; }
@@ -567,9 +578,53 @@
 
     // ------------------------------------------------------------ dragging and keys
     // ------------------------------------------------------------ the occasional idle dance
-    // In place: only transforms (hops of at most 12px, sway of at most 10px, tilts, a flip on alternate
-    // beats) and the neutral and talking pictures in turn, all in guide.css. He never leaves where he
-    // stands, so he cannot end up over the chart, the result card or the globe's controls.
+    // In place: he never leaves where he stands. One pose per beat (DANCE_STEPS) with a small hop each
+    // (guide.css), flipped about his feet on alternate beats. The dance picture is wider than his box;
+    // if, where he stands, it would reach the chart, the result card or the globe's controls, he
+    // cheers only, and if even that would, he does not dance.
+
+    // Place every picture by its feet: the manifest says each picture's width and where its feet are
+    // (feet_anchor_x); neutral's picture fills his box, and every other one is sized at the same scale
+    // and shifted so that its feet sit at the same point. Widths and shifts are shares of his box, so
+    // they hold at every size (narrow windows, tucked away).
+    function placePoses(m) {
+      var ref = m && m.neutral;
+      var ok = function (p) { return p && Number(p.width) > 0 && isFinite(Number(p.feet_anchor_x)); };
+      if (!ok(ref)) return;
+      var imgs = root.querySelectorAll('.guide-img');
+      for (var i = 0; i < imgs.length; i++) if (!ok(m[imgs[i].dataset.pose])) return;
+      Array.prototype.forEach.call(imgs, function (img) {
+        var p = m[img.dataset.pose];
+        img.style.width = (100 * p.width / ref.width) + '%';
+        img.style.marginLeft = (100 * (ref.feet_anchor_x - p.feet_anchor_x) / ref.width) + '%';
+      });
+      // the fixed point his feet stand on, for flipping about it
+      root.style.setProperty('--guide-feet', (100 * ref.feet_anchor_x / ref.width) + '%');
+      poses = m;
+      root.dataset.poses = 'placed';
+    }
+
+    // where a pose's picture would be on screen, where he stands now (flipped: mirrored about his feet)
+    function poseRect(name, flip) {
+      var p = poses[name], ref = poses.neutral, b = avatar.getBoundingClientRect(), s = b.width / ref.width;
+      var feet = b.left + ref.feet_anchor_x * s;
+      var left = flip ? feet - (p.width - p.feet_anchor_x) * s : feet - p.feet_anchor_x * s;
+      return { left: left, right: left + p.width * s, top: b.top - DANCE_HOP, bottom: b.bottom };
+    }
+    function clearOfPage(steps) {
+      var rs = avoidRects();
+      return steps.every(function (st) {
+        var r = poseRect(st.pose, !!st.flip);
+        return !overlapArea(r.left, r.top, r.right - r.left, r.bottom - r.top, rs);
+      });
+    }
+    // the steps he can dance where he stands: the whole dance, or cheering only, or none
+    function danceSteps() {
+      if (clearOfPage(DANCE_STEPS)) return DANCE_STEPS;
+      var cheer = DANCE_STEPS.map(function (st) { return st.pose === 'dance' ? { pose: 'cheer', flip: st.flip } : st; });
+      return clearOfPage(cheer) ? cheer : null;
+    }
+
     function setDance(yes) {
       danceOn = yes;
       store.set(KEY_DANCE, yes ? 'on' : 'off');
@@ -583,7 +638,8 @@
     // idle: no tutorial, no bubble, no drag, tab visible, guide on and not tucked away (input is checked apart)
     function idleNow() {
       return danceable && danceOn && !calm && !reduced() && enabled && !tucked && tour < 0 && bubble.hidden &&
-             !drag && !dragPos && !document.hidden && !root.hidden;
+             !drag && !dragPos && !document.hidden && !root.hidden &&
+             !!poses && danceArtOk && root.dataset.art === 'fox';
     }
 
     function stopDance() {
@@ -591,22 +647,27 @@
       dancing.forEach(function (t) { window.clearTimeout(t); });
       dancing = null;
       root.classList.remove('guide-dancing');
-      delete root.dataset.beat;
+      delete root.dataset.dancePose;
+      delete root.dataset.flip;
+      delete root.dataset.dancePlan;
     }
 
+    function laterDance() { nextDance = Date.now() + T.min + Math.random() * (T.max - T.min); }
+
     function dance() {
-      var beat = T.len / DANCE_BEATS;
+      var steps = danceSteps();
+      if (!steps) { laterDance(); return; }            // no room where he stands: try again later
+      var beat = T.len / steps.length;
+      function show(st) { root.dataset.dancePose = st.pose; root.dataset.flip = st.flip ? 'yes' : 'no'; }
       dancing = [];
       root.style.setProperty('--dance-ms', Math.round(T.len) + 'ms');
-      root.dataset.beat = '0';
+      root.dataset.dancePlan = steps === DANCE_STEPS ? 'full' : 'cheer';
+      show(steps[0]);
       root.classList.add('guide-dancing');
-      for (var b = 1; b < DANCE_BEATS; b++) {
-        dancing.push(window.setTimeout(safe((function (n) { return function () { root.dataset.beat = String(n); }; })(b)), b * beat));
-      }
-      dancing.push(window.setTimeout(safe(function () {
-        stopDance();
-        nextDance = Date.now() + T.min + Math.random() * (T.max - T.min);
-      }), T.len));
+      steps.forEach(function (st, i) {
+        if (i) dancing.push(window.setTimeout(safe(function () { show(st); }), i * beat));
+      });
+      dancing.push(window.setTimeout(safe(function () { stopDance(); laterDance(); }), T.len));
     }
 
     // checked a few times a second; a dance stops as soon as he is no longer idle
@@ -700,9 +761,19 @@
     });
     on(window, 'load', sync);
     // a picture that cannot be loaded: the drawn drone takes his place
-    Array.prototype.forEach.call(root.querySelectorAll('.guide-img'), function (img) {
+    Array.prototype.forEach.call(root.querySelectorAll('.guide-img:not(.guide-img-extra)'), function (img) {
       on(img, 'error', function () { root.dataset.art = 'drone'; sync(); });
     });
+    // a dance picture that cannot be loaded: no dance, nothing else changes
+    Array.prototype.forEach.call(root.querySelectorAll('.guide-img-extra'), function (img) {
+      on(img, 'error', function () { danceArtOk = false; stopDance(); });
+    });
+    // the manifest places every picture by its feet; without it the pictures stay as they are, and no dance
+    if (haveArt && MANIFEST && window.fetch) {
+      window.fetch(MANIFEST).then(function (r) { if (!r.ok) throw new Error(String(r.status)); return r.json(); })
+        .then(function (m) { if (!dead) { try { placePoses(m); } catch (e) { poses = null; } } })
+        .catch(function () { /* no manifest: no dance */ });
+    }
     // the result card and the globe appear and disappear: keep off them
     if (window.MutationObserver) {
       var watcher = new MutationObserver(safe(sync));

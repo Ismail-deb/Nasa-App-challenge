@@ -1,0 +1,32 @@
+{
+  "neutral": {
+    "file": "comet-neutral.webp",
+    "width": 460,
+    "height": 512,
+    "feet_anchor_x": 192.1
+  },
+  "talking": {
+    "file": "comet-talking.webp",
+    "width": 460,
+    "height": 512,
+    "feet_anchor_x": 192.0
+  },
+  "pointing": {
+    "file": "comet-pointing.webp",
+    "width": 460,
+    "height": 512,
+    "feet_anchor_x": 188.9
+  },
+  "cheer": {
+    "file": "comet-cheer.webp",
+    "width": 420,
+    "height": 512,
+    "feet_anchor_x": 165.6
+  },
+  "dance": {
+    "file": "comet-dance.webp",
+    "width": 616,
+    "height": 512,
+    "feet_anchor_x": 330.6
+  }
+}

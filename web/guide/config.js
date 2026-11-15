@@ -4,23 +4,29 @@
 // is built from it; texts below use the placeholder {name}. To rename the guide, change this line.
 const GUIDE_NAME = "Comet";
 
-// The character's three poses: one transparent picture each, all on the same canvas size and with the
-// feet in the same place, so swapping between them never makes him jump. If any of them fails to load,
-// the guide falls back to a small drawn drone.
+// The character's poses: one transparent picture each. neutral, talking and pointing are his everyday
+// poses (if any of them fails to load, the guide falls back to a small drawn drone); cheer (arms up) and
+// dance (mid-spin, a wider picture) are only for the idle dance, which is skipped if they fail to load.
 const GUIDE_IMAGES = {
   "neutral": "/static/guide/assets/comet-neutral.webp",
   "talking": "/static/guide/assets/comet-talking.webp",
-  "pointing": "/static/guide/assets/comet-pointing.webp"
+  "pointing": "/static/guide/assets/comet-pointing.webp",
+  "cheer": "/static/guide/assets/comet-cheer.webp",
+  "dance": "/static/guide/assets/comet-dance.webp"
 };
 
-// The occasional idle dance (about 4 beats, in place). Times in seconds:
+// Each picture's size and feet_anchor_x (where his feet are, in picture pixels). Every pose is placed by
+// lining its feet up with one fixed point at the bottom of his box, so he never jumps when poses swap.
+const GUIDE_POSE_MANIFEST = "/static/guide/assets/comet-poses.json";
+
+// The occasional idle dance (in place: neutral, cheer, dance, cheer, dance, neutral). Times in seconds:
 //   idleSeconds       how long he must have been idle (no tutorial, no speech bubble, not dragged,
 //                     tab visible, guide on and not tucked away) before the first dance
 //   quietSeconds      and no mouse, key or scroll input on the page for at least this long
 //   repeatMinSeconds, repeatMaxSeconds   after each dance, the next one waits a random time in this range
 //   durationSeconds   length of one dance
 // Off with ?calm=1 in the address, with the "Idle dance" header button, or with prefers-reduced-motion.
-const GUIDE_DANCE = {"idleSeconds": 15, "quietSeconds": 10, "repeatMinSeconds": 45, "repeatMaxSeconds": 90, "durationSeconds": 3};
+const GUIDE_DANCE = {"idleSeconds": 15, "quietSeconds": 10, "repeatMinSeconds": 45, "repeatMaxSeconds": 90, "durationSeconds": 4};
 
 // What the guide says when he is clicked outside the tutorial.
 const GUIDE_GREETING = "Hi, I'm {name}, your fox guide. Press any ? button and I'll explain that word, or use the replay button at the top for the tour.";

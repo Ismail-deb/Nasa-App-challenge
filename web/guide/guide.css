@@ -42,7 +42,7 @@ button.tip[hidden], .guide[hidden], .guide [hidden], .guide-spot[hidden] { displ
 .guide-flip, .guide-sway, .guide-bobber { display: block; width: 100%; }
 .guide-flip { filter: drop-shadow(0 10px 14px rgba(58, 34, 24, .22)); }
 .guide-sway { transform-origin: 50% 100%; }
-.guide-bobber { display: grid; }
+.guide-bobber { display: grid; grid-template-columns: 100%; }   /* one cell, as wide as his box; wider poses overflow it */
 
 /* the three poses share one cell and one canvas size, so swapping them never moves him */
 .guide-img { grid-area: 1 / 1; display: block; width: 100%; height: auto; opacity: 0; pointer-events: none; user-select: none; -webkit-user-drag: none; }
@@ -111,20 +111,19 @@ body.guide-touring { padding-bottom: 50vh; }
 @keyframes guide-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
 @keyframes guide-sway { 0%, 72%, 100% { transform: rotate(0deg); } 80% { transform: rotate(-3deg); } 92% { transform: rotate(2deg); } }
 
-/* the occasional idle dance (guide.js), in place: hops (at most 12px), a sway (at most 10px wide) and small
-   tilts, flipped on alternate beats, with the neutral and talking pictures in turn; it ends at rest */
-.guide.guide-dancing .guide-sway { animation: none; }
-.guide.guide-dancing .guide-bobber { animation: guide-dance var(--dance-ms, 3s) ease-in-out 1 both; }
-.guide.guide-dancing[data-beat="1"] .guide-sway,
-.guide.guide-dancing[data-beat="3"] .guide-sway { transform: scaleX(-1); }
-.guide.guide-dancing[data-beat="1"] .guide-img[data-pose="neutral"],
-.guide.guide-dancing[data-beat="3"] .guide-img[data-pose="neutral"] { opacity: 0; }
-.guide.guide-dancing[data-beat="1"] .guide-img[data-pose="talking"],
-.guide.guide-dancing[data-beat="3"] .guide-img[data-pose="talking"] { opacity: 1; }
+/* the occasional idle dance (guide.js), in place: one pose per beat (guide.js sets data-dance-pose), a hop
+   of at most 12px on each of the four middle beats, and a flip about his feet on alternate beats; the
+   wider dance picture may reach past his box (it does not change his size or where he stands) */
+.guide.guide-dancing .guide-sway { animation: none; transform-origin: var(--guide-feet, 50%) 100%; }
+.guide.guide-dancing[data-flip="yes"] .guide-sway { transform: scaleX(-1); }
+.guide.guide-dancing .guide-bobber { animation: guide-dance var(--dance-ms, 4s) linear 1 both; }
+.guide.guide-dancing[data-dance-pose] .guide-img { opacity: 0; }
+.guide.guide-dancing[data-dance-pose="neutral"] .guide-img[data-pose="neutral"],
+.guide.guide-dancing[data-dance-pose="cheer"] .guide-img[data-pose="cheer"],
+.guide.guide-dancing[data-dance-pose="dance"] .guide-img[data-pose="dance"] { opacity: 1; }
 @keyframes guide-dance {
-  0%, 25%, 50%, 75%, 100% { transform: translate(0, 0) rotate(0deg); }
-  12.5%, 62.5% { transform: translate(-5px, -12px) rotate(-5deg); }
-  37.5%, 87.5% { transform: translate(5px, -12px) rotate(5deg); }
+  0%, 16.67%, 33.33%, 50%, 66.67%, 83.33%, 100% { transform: translateY(0); animation-timing-function: ease-out; }
+  25%, 41.67%, 58.33%, 75% { transform: translateY(-12px); animation-timing-function: ease-in; }
 }
 
 /* ---- the fallback: a small drawn drone, used only if a picture cannot be loaded ---- */
