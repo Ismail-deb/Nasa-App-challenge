@@ -1,0 +1,98 @@
+<!doctype html><meta charset="utf-8"><title>harness: idle dance</title>
+<iframe id="f" width="1300" height="860"></iframe>
+<script>
+// The guide's idle dance, with short timings (tests/test_page_browser.py serves a config with them):
+// it starts when he is idle, stays in place and ends at rest; it never starts during the tutorial or
+// while a bubble shows; a drag cancels it; the header button and ?calm=1 turn it off.
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const out = {errors: []};
+const post = (path, body) => fetch(path, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body || {})});
+const f = document.getElementById('f');
+let d, w, $, starts = 0, poses = new Set(), flips = new Set(), places = new Set();
+
+const waitFor = async (fn, ms = 8000) => {
+  for (let t = 0; t < ms; t += 25) { try { if (fn()) return true; } catch (e) {} await sleep(25); }
+  return false;
+};
+async function load(query) {
+  const loaded = new Promise(r => f.addEventListener('load', r, {once: true}));
+  f.src = '/' + (query || '');
+  await loaded;
+  w = f.contentWindow; d = f.contentDocument; $ = id => d.getElementById(id);
+  w.addEventListener('error', e => out.errors.push(String(e.message)));
+  w.addEventListener('unhandledrejection', e => out.errors.push('rejection: ' + e.reason));
+  for (const k of ['error', 'warn']) {
+    const orig = w.console[k];
+    w.console[k] = (...a) => { out.errors.push(`console.${k}: ${a.join(' ')}`); orig.apply(w.console, a); };
+  }
+  await waitFor(() => $('guide') && d.querySelectorAll('#demos button').length > 0);
+  starts = 0;
+  // count dance starts, and note what he looks like and where he stands while dancing
+  new w.MutationObserver(() => {
+    const g = $('guide');
+    if (!g.classList.contains('guide-dancing')) return;
+    if (g.dataset.beat === '0') starts += 1;
+    const img = [...d.querySelectorAll('.guide-img')].find(x => w.getComputedStyle(x).opacity === '1');
+    poses.add(img ? img.dataset.pose : null);
+    flips.add(w.getComputedStyle(d.querySelector('.guide-sway')).transform);
+    places.add(g.style.left + ',' + g.style.top);
+  }).observe($('guide'), {attributes: true, attributeFilter: ['class', 'data-beat']});
+}
+const dancing = () => $('guide').classList.contains('guide-dancing');
+const bubbleOpen = () => !$('guideBubble').hidden;
+
+(async () => {
+  try {
+    try { localStorage.clear(); localStorage.setItem('estd.guide.tutorialSeen', '1'); } catch (e) {}
+    await post('/__harness/mode/fastdance');
+    await load();
+
+    // 1. idle: he dances, in place, through every beat, and ends at rest
+    const rest = $('guide').style.left + ',' + $('guide').style.top;
+    out.started = await waitFor(dancing, 10000);
+    out.ended = await waitFor(() => !dancing(), 10000);
+    await sleep(100);
+    out.first = {poses: [...poses].sort(), flips: [...flips].sort(), places: [...places], rest,
+                 restAfter: $('guide').style.left + ',' + $('guide').style.top, state: $('guide').dataset.state,
+                 beatLeft: 'beat' in $('guide').dataset, button: $('guideDance').textContent,
+                 pressed: $('guideDance').getAttribute('aria-pressed')};
+
+    // 2. a drag (pointerdown on him) cancels a dance at once
+    out.secondStarted = await waitFor(dancing, 10000);
+    $('guideAvatar').dispatchEvent(new w.PointerEvent('pointerdown', {bubbles: true, pointerId: 7, button: 0, clientX: 5, clientY: 5}));
+    out.cancelledByDrag = !dancing();
+    $('guideAvatar').dispatchEvent(new w.PointerEvent('pointerup', {bubbles: true, pointerId: 7, button: 0, clientX: 5, clientY: 5}));
+
+    // 3. never while a bubble shows (his greeting)
+    $('guideAvatar').click();
+    await waitFor(bubbleOpen);
+    let before = starts;
+    await sleep(4000);
+    out.whileBubble = {open: bubbleOpen(), started: starts - before, dancing: dancing()};
+    d.querySelector('#guideBubble [data-act="close"]').click();
+
+    // 4. never during the tutorial
+    $('guideReplay').click();
+    await waitFor(bubbleOpen);
+    before = starts;
+    await sleep(4000);
+    out.whileTour = {open: bubbleOpen(), started: starts - before, dancing: dancing()};
+    d.querySelector('#guideBubble [data-act="skip"]').click();
+
+    // 5. the header button turns it off (and remembers it)
+    $('guideDance').click();
+    before = starts;
+    await sleep(4000);
+    out.off = {started: starts - before, button: $('guideDance').textContent, stored: w.localStorage.getItem('estd.guide.dance')};
+    $('guideDance').click();
+    out.backOn = {button: $('guideDance').textContent, stored: w.localStorage.getItem('estd.guide.dance')};
+
+    // 6. ?calm=1 turns it off, whatever the button says
+    await load('?calm=1');
+    await sleep(4000);
+    out.calm = {started: starts, button: $('guideDance').textContent, disabled: $('guideDance').disabled};
+  } catch (e) { out.errors.push('harness: ' + (e && e.stack || e)); }
+  await post('/__harness/mode/normal');
+  await post('/__harness/result/dance', out);
+})();
+</script>

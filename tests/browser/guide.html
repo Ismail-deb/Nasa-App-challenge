@@ -21,10 +21,10 @@ const waitFor = async (fn, ms = 8000) => {
 async function load() {
   const old = f.contentWindow;
   const loaded = new Promise(r => f.addEventListener('load', r, {once: true}));
-  f.src = '/?load=' + (++loads);
+  f.src = '/?calm=1&load=' + (++loads);              // calm: no idle dance in the middle of the checks
   for (let i = 0; i < 4000; i++) {
     const cw = f.contentWindow;
-    try { if (cw && cw.location.search === '?load=' + loads && cw.document && !cw.__hooked) { hook(cw); break; } } catch (e) {}
+    try { if (cw && cw.location.search === '?calm=1&load=' + loads && cw.document && !cw.__hooked) { hook(cw); break; } } catch (e) {}
     await sleep(1);
   }
   await loaded;

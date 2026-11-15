@@ -5,6 +5,7 @@ Each test opens tests/browser/<name>.html, which loads the real page in an ifram
 it and posts what it saw back to this process. Uses the committed preset series in data/series/.
 """
 import json
+import re
 import os
 import shutil
 import socket
@@ -64,6 +65,9 @@ def site():
             return Response(status_code=404)
         if mode["guide"] == "broken":
             js = 'const GUIDE_NAME = "X"; const GUIDE_STEPS = null; const GUIDE_TIPS = 5;'
+        if mode["guide"] == "fastdance":                    # the idle dance within seconds, not minutes
+            js = re.sub(r"^const GUIDE_DANCE = .*;$", 'const GUIDE_DANCE = {"idleSeconds": 1, "quietSeconds": 0.5, '
+                        '"repeatMinSeconds": 1, "repeatMaxSeconds": 1.5, "durationSeconds": 1.2};', js, flags=re.M)
         if mode["guide"] == "nostorage":
             js = ("Object.defineProperty(window, 'localStorage', {get() { throw new Error('blocked'); }});\n" + js)
         return Response(js, media_type="text/javascript", headers=main.NO_CACHE)
@@ -313,6 +317,27 @@ def test_reduced_motion_means_no_animation_and_instant_text(site, tmp_path):
     assert r["transition"] == "none"                                                       # no flying: he jumps
     assert r["pose"] == "pointing" and r["step2"]["pose"] == "pointing"                    # the pose swaps still happen
     assert r["step2"]["typed"] == _said(steps[1]["text"], name) and r["step2"]["state"] != "talking"
+
+
+def test_idle_dance_runs_in_place_and_never_during_the_tour_or_a_bubble(site, tmp_path):
+    """With short timings from the config: he dances when idle, through all four beats (neutral and
+    talking pictures, flipped and not), without moving, and ends at rest; a drag cancels it; a bubble or
+    the tutorial keeps it off; the header button and ?calm=1 turn it off. Nothing in the console."""
+    out = site("dance", tmp_path / "profile")
+    assert out["errors"] == [], out["errors"]
+    assert out["started"] and out["ended"], out
+    first = out["first"]
+    assert first["poses"] == ["neutral", "talking"], first
+    assert "none" in first["flips"] and any(t.startswith("matrix(-1") for t in first["flips"]), first
+    assert first["places"] == [first["rest"]] and first["restAfter"] == first["rest"], first      # in place
+    assert first["state"] == "idle" and not first["beatLeft"], first
+    assert first["button"] == "Idle dance: on" and first["pressed"] == "true", first
+    assert out["secondStarted"] and out["cancelledByDrag"], out
+    assert out["whileBubble"] == {"open": True, "started": 0, "dancing": False}, out["whileBubble"]
+    assert out["whileTour"] == {"open": True, "started": 0, "dancing": False}, out["whileTour"]
+    assert out["off"] == {"started": 0, "button": "Idle dance: off", "stored": "off"}, out["off"]
+    assert out["backOn"] == {"button": "Idle dance: on", "stored": "on"}, out["backOn"]
+    assert out["calm"] == {"started": 0, "button": "Idle dance: off", "disabled": True}, out["calm"]
 
 
 # ---------------------------------------------------------------- the optional globe view

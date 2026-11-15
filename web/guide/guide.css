@@ -111,6 +111,22 @@ body.guide-touring { padding-bottom: 50vh; }
 @keyframes guide-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
 @keyframes guide-sway { 0%, 72%, 100% { transform: rotate(0deg); } 80% { transform: rotate(-3deg); } 92% { transform: rotate(2deg); } }
 
+/* the occasional idle dance (guide.js), in place: hops (at most 12px), a sway (at most 10px wide) and small
+   tilts, flipped on alternate beats, with the neutral and talking pictures in turn; it ends at rest */
+.guide.guide-dancing .guide-sway { animation: none; }
+.guide.guide-dancing .guide-bobber { animation: guide-dance var(--dance-ms, 3s) ease-in-out 1 both; }
+.guide.guide-dancing[data-beat="1"] .guide-sway,
+.guide.guide-dancing[data-beat="3"] .guide-sway { transform: scaleX(-1); }
+.guide.guide-dancing[data-beat="1"] .guide-img[data-pose="neutral"],
+.guide.guide-dancing[data-beat="3"] .guide-img[data-pose="neutral"] { opacity: 0; }
+.guide.guide-dancing[data-beat="1"] .guide-img[data-pose="talking"],
+.guide.guide-dancing[data-beat="3"] .guide-img[data-pose="talking"] { opacity: 1; }
+@keyframes guide-dance {
+  0%, 25%, 50%, 75%, 100% { transform: translate(0, 0) rotate(0deg); }
+  12.5%, 62.5% { transform: translate(-5px, -12px) rotate(-5deg); }
+  37.5%, 87.5% { transform: translate(5px, -12px) rotate(5deg); }
+}
+
 /* ---- the fallback: a small drawn drone, used only if a picture cannot be loaded ---- */
 .guide[data-art="fox"] .guide-drone-svg { display: none; }
 .guide[data-art="drone"] .guide-img { display: none; }

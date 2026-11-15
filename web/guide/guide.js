@@ -9,7 +9,7 @@
    it works without it; nothing is ever written to the console.
 
    Texts, the guide's name and the picture addresses come from config.js
-   (GUIDE_NAME, GUIDE_IMAGES, GUIDE_STEPS, GUIDE_STEPS_GLOBE, GUIDE_TIPS). */
+   (GUIDE_NAME, GUIDE_IMAGES, GUIDE_STEPS, GUIDE_STEPS_GLOBE, GUIDE_TIPS, GUIDE_DANCE). */
 (function () {
   'use strict';
 
@@ -50,6 +50,8 @@
   var KEY_SEEN_GLOBE = 'estd.guide.globeTutorialSeen';   // the same, for the Globe-view tutorial
   var KEY_POS = 'estd.guide.pos';             // where he stands: {"x": 0..1, "y": 0..1} across the free area
   var KEY_TUCK = 'estd.guide.tucked';         // "yes" | "no" (missing = tucked only in a narrow window)
+  var KEY_DANCE = 'estd.guide.dance';         // "on" | "off" (missing = on): the occasional idle dance
+  var DANCE_BEATS = 4;                         // the dance's beats: hop, flip and pose swap on each
 
   var POSES = ['neutral', 'talking', 'pointing'];
   var OVER = 12;          // px he may stand past the window edge
@@ -90,6 +92,14 @@
     var IMAGES = typeof GUIDE_IMAGES === 'object' && GUIDE_IMAGES ? GUIDE_IMAGES : null;
     var haveArt = !!IMAGES && POSES.every(function (p) { return typeof IMAGES[p] === 'string' && IMAGES[p]; });
     var fill = function (s) { return String(s).split('{name}').join(NAME); };
+    // the idle dance: its timing from config.js (GUIDE_DANCE, seconds); none without a complete one
+    var DANCE = typeof GUIDE_DANCE === 'object' && GUIDE_DANCE ? GUIDE_DANCE : {};
+    var ms = function (k) { var v = Number(DANCE[k]); return isFinite(v) && v >= 0 ? v * 1000 : NaN; };
+    var T = { idle: ms('idleSeconds'), quiet: ms('quietSeconds'), min: ms('repeatMinSeconds'),
+              max: ms('repeatMaxSeconds'), len: ms('durationSeconds') };
+    var danceable = [T.idle, T.quiet, T.min, T.max, T.len].every(isFinite) && T.max >= T.min && T.len > 0;
+    // ?calm=1 in the address (for presenting): no dance at all
+    var calm = /(?:^|[?&])calm=1(?:&|$)/.test(window.location.search);
 
     // localStorage may be unavailable (private mode, blocked): fall back to memory for this visit
     var mem = {};
@@ -149,12 +159,14 @@
     // header controls: "<name>: on/off" and "Replay with <name>"
     var controls = document.getElementById('guideControls');
     var toggleBtn = document.createElement('button'), replayBtn = document.createElement('button');
-    toggleBtn.type = replayBtn.type = 'button';
+    var danceBtn = document.createElement('button');
+    toggleBtn.type = replayBtn.type = danceBtn.type = 'button';
+    danceBtn.id = 'guideDance';
     toggleBtn.id = 'guideToggle';
     replayBtn.id = 'guideReplay';
     replayBtn.textContent = 'Replay with ' + NAME;
     replayBtn.title = 'Run the short tutorial again';
-    made.push(toggleBtn, replayBtn);
+    made.push(toggleBtn, danceBtn, replayBtn);
 
     // ------------------------------------------------------------ state
     var enabled = store.get(KEY_ON) !== 'off';
@@ -165,6 +177,9 @@
     var saved = readPos();  // where he stands when idle, as a share of the free area (survives resizes)
     var dragPos = null;     // {x, y} in pixels while he is being dragged
     var suppressClick = false;
+    var danceOn = store.get(KEY_DANCE) !== 'off';
+    var dancing = null;     // the running dance's timers, null when he is not dancing
+    var lastInput = Date.now(), idleSince = null, nextDance = 0;
     var tucked = (function () { var s = store.get(KEY_TUCK); return s === null ? vw() <= NARROW : s === 'yes'; })();
 
     function setState(s) { root.dataset.state = s; }
@@ -351,6 +366,7 @@
     }
 
     function setTucked(yes, remember) {
+      if (yes) stopDance();
       tucked = yes;
       root.dataset.tucked = String(yes);
       tuckBtn.textContent = yes ? '+' : '–';
@@ -383,6 +399,7 @@
     function show(el, yes) { el.hidden = !yes; }
 
     function openBubble() {
+      stopDance();                                     // a bubble ends a dance at once
       root.hidden = false;
       bubble.hidden = false;
       avatar.setAttribute('aria-expanded', 'true');
@@ -545,12 +562,65 @@
       toggleBtn.setAttribute('aria-pressed', String(yes));
       toggleBtn.title = yes ? 'Hide ' + NAME : 'Show ' + NAME;
       document.body.classList.toggle('guide-on', yes);
-      if (yes) { root.hidden = false; layout(); } else closeBubble();
+      if (yes) { root.hidden = false; layout(); } else { stopDance(); closeBubble(); }
     }
 
     // ------------------------------------------------------------ dragging and keys
+    // ------------------------------------------------------------ the occasional idle dance
+    // In place: only transforms (hops of at most 12px, sway of at most 10px, tilts, a flip on alternate
+    // beats) and the neutral and talking pictures in turn, all in guide.css. He never leaves where he
+    // stands, so he cannot end up over the chart, the result card or the globe's controls.
+    function setDance(yes) {
+      danceOn = yes;
+      store.set(KEY_DANCE, yes ? 'on' : 'off');
+      danceBtn.textContent = 'Idle dance: ' + (yes && !calm ? 'on' : 'off');
+      danceBtn.setAttribute('aria-pressed', String(yes && !calm));
+      danceBtn.disabled = calm;
+      danceBtn.title = calm ? 'Turned off for presenting (calm=1 in the address)' : (yes ? 'Stop the occasional idle dance' : 'Allow the occasional idle dance');
+      if (!yes) stopDance();
+    }
+
+    // idle: no tutorial, no bubble, no drag, tab visible, guide on and not tucked away (input is checked apart)
+    function idleNow() {
+      return danceable && danceOn && !calm && !reduced() && enabled && !tucked && tour < 0 && bubble.hidden &&
+             !drag && !dragPos && !document.hidden && !root.hidden;
+    }
+
+    function stopDance() {
+      if (!dancing) return;
+      dancing.forEach(function (t) { window.clearTimeout(t); });
+      dancing = null;
+      root.classList.remove('guide-dancing');
+      delete root.dataset.beat;
+    }
+
+    function dance() {
+      var beat = T.len / DANCE_BEATS;
+      dancing = [];
+      root.style.setProperty('--dance-ms', Math.round(T.len) + 'ms');
+      root.dataset.beat = '0';
+      root.classList.add('guide-dancing');
+      for (var b = 1; b < DANCE_BEATS; b++) {
+        dancing.push(window.setTimeout(safe((function (n) { return function () { root.dataset.beat = String(n); }; })(b)), b * beat));
+      }
+      dancing.push(window.setTimeout(safe(function () {
+        stopDance();
+        nextDance = Date.now() + T.min + Math.random() * (T.max - T.min);
+      }), T.len));
+    }
+
+    // checked a few times a second; a dance stops as soon as he is no longer idle
+    function danceTick() {
+      var now = Date.now();
+      if (!idleNow()) { stopDance(); idleSince = null; return; }
+      if (dancing) return;
+      if (idleSince === null) idleSince = now;
+      if (now - idleSince >= T.idle && now - lastInput >= T.quiet && now >= nextDance) dance();
+    }
+
     var drag = null;
     on(avatar, 'pointerdown', function (e) {
+      stopDance();                                     // a click or a drag ends a dance at once
       if (e.button > 0 || tour >= 0) return;           // not during the tutorial: he places himself
       var d = dims(), b = root.getBoundingClientRect();
       drag = { id: e.pointerId, sx: e.clientX, sy: e.clientY, ox: b.left, oy: b.top, d: d, moved: false };
@@ -607,6 +677,12 @@
     });
     on(tuckBtn, 'click', function () { setTucked(!tucked, true); });
     on(toggleBtn, 'click', function () { setEnabled(!enabled); });
+    on(danceBtn, 'click', function () { setDance(!danceOn); });
+    // mouse, key, touch and scroll input anywhere on the page: no dance for a while
+    ['pointerdown', 'pointermove', 'keydown', 'wheel', 'touchstart', 'scroll'].forEach(function (type) {
+      on(window, type, function () { lastInput = Date.now(); }, { capture: true, passive: true });
+    });
+    on(document, 'visibilitychange', function () { if (document.hidden) stopDance(); });
     on(replayBtn, 'click', function () { setEnabled(true); return startTour(); });
     on(document, 'keydown', function (e) { if (e.key === 'Escape' && !bubble.hidden) closeBubble(); });
     on(document, 'click', function (e) {
@@ -642,7 +718,12 @@
 
     document.body.appendChild(spot);
     document.body.appendChild(root);
-    if (controls) { controls.appendChild(toggleBtn); controls.appendChild(replayBtn); }
+    if (controls) { controls.appendChild(toggleBtn); controls.appendChild(danceBtn); controls.appendChild(replayBtn); }
+    setDance(danceOn);
+    if (danceable) {
+      var ticker = window.setInterval(safe(danceTick), 250);
+      cleanups.push(function () { window.clearInterval(ticker); stopDance(); });
+    }
     Array.prototype.forEach.call(document.querySelectorAll('button.tip'), function (b) { tipLabel(b); b.hidden = false; });
     setTucked(tucked, false);
     setEnabled(enabled);

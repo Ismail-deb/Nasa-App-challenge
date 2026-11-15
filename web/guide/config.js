@@ -13,6 +13,15 @@ const GUIDE_IMAGES = {
   "pointing": "/static/guide/assets/comet-pointing.webp"
 };
 
+// The occasional idle dance (about 4 beats, in place). Times in seconds:
+//   idleSeconds       how long he must have been idle (no tutorial, no speech bubble, not dragged,
+//                     tab visible, guide on and not tucked away) before the first dance
+//   quietSeconds      and no mouse, key or scroll input on the page for at least this long
+//   repeatMinSeconds, repeatMaxSeconds   after each dance, the next one waits a random time in this range
+//   durationSeconds   length of one dance
+// Off with ?calm=1 in the address, with the "Idle dance" header button, or with prefers-reduced-motion.
+const GUIDE_DANCE = {"idleSeconds": 30, "quietSeconds": 10, "repeatMinSeconds": 45, "repeatMaxSeconds": 90, "durationSeconds": 3};
+
 // What the guide says when he is clicked outside the tutorial.
 const GUIDE_GREETING = "Hi, I'm {name}, your fox guide. Press any ? button and I'll explain that word, or use the replay button at the top for the tour.";
 

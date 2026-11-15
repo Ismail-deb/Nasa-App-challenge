@@ -161,6 +161,59 @@ def test_first_visit_logic_and_persisted_toggle():
     assert GUIDE_JS.count("localStorage") == GUIDE_JS.count("window.localStorage.") + 1   # only inside the store (+ a comment)
 
 
+# ---------------------------------------------------------------- the occasional idle dance
+
+DANCE = _const("GUIDE_DANCE")
+
+
+def test_dance_timing_comes_from_the_config():
+    assert DANCE == {"idleSeconds": 30, "quietSeconds": 10, "repeatMinSeconds": 45, "repeatMaxSeconds": 90,
+                     "durationSeconds": 3}
+    assert len(re.findall(r"\bGUIDE_DANCE\s*=", CONFIG)) == 1
+    for key in DANCE:
+        assert f"ms('{key}')" in GUIDE_JS, key
+    # no timing number of its own in the dance code
+    dance_code = GUIDE_JS.split("---- the occasional idle dance")[1].split("var drag = null;")[0]
+    for n in ("30", "10", "45", "90", "3000"):
+        assert not re.search(rf"(?<![\w.]){n}(?:000)?(?![\w.])", dance_code), n
+    tick = GUIDE_JS.split("function danceTick() {")[1].split("\n    }")[0]
+    assert "now - idleSince >= T.idle && now - lastInput >= T.quiet && now >= nextDance" in tick
+    assert "nextDance = Date.now() + T.min + Math.random() * (T.max - T.min);" in GUIDE_JS
+
+
+def test_dance_only_when_idle_never_in_the_tour_a_bubble_or_a_drag():
+    idle = GUIDE_JS.split("function idleNow() {")[1].split("\n    }")[0]
+    for cond in ("danceOn", "!calm", "!reduced()", "enabled", "!tucked", "tour < 0", "bubble.hidden",
+                 "!drag", "!dragPos", "!document.hidden"):
+        assert cond in idle, cond
+    assert "if (!idleNow()) { stopDance(); idleSince = null; return; }" in GUIDE_JS     # stops as soon as he is not idle
+    assert "function openBubble() {\n      stopDance();" in GUIDE_JS                   # a bubble (and so the tour) ends it
+    drag = GUIDE_JS.split("on(avatar, 'pointerdown', function (e) {")[1].split("});")[0]
+    assert drag.strip().startswith("stopDance();")                                     # a click or a drag ends it
+    for t in ("'pointerdown'", "'pointermove'", "'keydown'", "'wheel'", "'scroll'"):
+        assert t in GUIDE_JS.split("no dance for a while")[1].split("});")[0], t
+
+
+def test_calm_and_reduced_motion_turn_the_dance_off_and_it_has_a_switch():
+    assert "var calm = /(?:^|[?&])calm=1(?:&|$)/.test(window.location.search);" in GUIDE_JS
+    assert "var KEY_DANCE = 'estd.guide.dance';" in GUIDE_JS and "store.set(KEY_DANCE, yes ? 'on' : 'off');" in GUIDE_JS
+    assert "var danceOn = store.get(KEY_DANCE) !== 'off';" in GUIDE_JS                  # on by default
+    assert "danceBtn.textContent = 'Idle dance: ' + (yes && !calm ? 'on' : 'off');" in GUIDE_JS
+    assert "controls.appendChild(toggleBtn); controls.appendChild(danceBtn);" in GUIDE_JS   # next to the guide toggle
+    reduced = GUIDE_CSS.split("@media (prefers-reduced-motion: reduce)")[1].split("}")[0]
+    assert ".guide *" in reduced and "animation: none !important" in reduced
+
+
+def test_dance_stays_in_place_and_small():
+    keys = GUIDE_CSS.split("@keyframes guide-dance {")[1].split("\n}")[0]
+    moves = [(abs(float(x)), abs(float(y))) for x, y in re.findall(r"translate\((-?[\d.]+)px, (-?[\d.]+)px\)", keys)]
+    assert moves and max(y for _, y in moves) <= 12 and 2 * max(x for x, _ in moves) <= 10, moves
+    assert "left" not in keys and "top" not in keys                                    # transforms only
+    dance = GUIDE_JS.split("function dance() {")[1].split("\n    }")[0]
+    assert "style.left" not in dance and "style.top" not in dance
+    assert '.guide.guide-dancing[data-beat="1"] .guide-sway' in GUIDE_CSS and "scaleX(-1)" in GUIDE_CSS
+
+
 def test_three_animation_states_and_reduced_motion():
     for state in ("idle", "talking", "pointing"):
         assert f'.guide[data-state="{state}"]' in GUIDE_CSS
