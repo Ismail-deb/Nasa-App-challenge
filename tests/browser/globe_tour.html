@@ -41,10 +41,10 @@ const report = () => fetch('/__harness/result/globe_tour', {method: 'POST', head
     };
     const act = name => d.querySelector(`#guideBubble [data-act="${name}"]`);
     // walk the tutorial that is open, pressing Next until it closes
-    const walk = async (list) => {
+    const walk = async (list, pause = 500) => {
       const seen = [];
       for (let n = 0; n < 12 && open(); n++) {
-        await settled(); await sleep(800);               // typing done, globe and spotlight settled
+        await settled(); await sleep(pause);               // typing done, globe and spotlight settled
         const i = parseInt(text('.guide-progress').replace('Step ', ''), 10) - 1, step = list[i] || {};
         const want = rect(step.target || '#none') || (step.fallback ? rect(step.fallback) : null);
         const s = $('guideSpot'), px = k => parseFloat(s.style[k]);
@@ -91,11 +91,11 @@ const report = () => fetch('/__harness/result/globe_tour', {method: 'POST', head
       act('skip').click(); await sleep(200);
 
       // back in Globe view (second visit: no tutorial by itself); a step whose element is gone is skipped
-      d.querySelector('#viewToggle [data-view="globe"]').click(); await sleep(1200);
+      d.querySelector('#viewToggle [data-view="globe"]').click(); await sleep(700);
       out.secondVisit = {open: open()};
       $('trendLegend').remove();
       $('guideReplay').click(); await sleep(200);
-      out.withoutLegend = (await walk(globeSteps)).map(s => s.id);
+      out.withoutLegend = (await walk(globeSteps, 100)).map(s => s.id);
     } else {
       // no WebGL here: the page is back in Classic view, and replay gives the Classic tutorial
       await sleep(500);
