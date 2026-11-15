@@ -243,3 +243,51 @@ def test_comma_decimal_bbox_is_a_clear_400_not_a_crash(client):
         assert r.status_code == 400 and "four numbers" in r.json()["detail"]
     ok = c.get("/trend", params={"variable": "M2TMNXSLV/WIND50M", "bbox": "-1,-1,1,1"})
     assert ok.status_code == 200
+
+
+# ---------------------------------------------------------------- page <-> /lenses contract
+
+def test_page_lens_code_matches_the_lenses_response_shape():
+    """Every field the page reads from a /lenses entry exists in the real response."""
+    import re
+    html = _page()
+    c = TestClient(__import__("app.main", fromlist=["app"]).app)
+    body = c.get("/lenses").json()
+    assert isinstance(body, list) and body
+    used = set()
+    script = html.split("<script>")[-1]
+    for chunk in (script.split("async function init()")[1].split("async function demo")[0],
+                  script.split("async function demo")[1].split("async function run")[0]):
+        used |= set(re.findall(r"\bl\.(\w+)", chunk))                 # l = a lens entry
+    assert {"id", "name", "description", "variables", "default_variable"} <= used
+    for lens in body:
+        assert used <= set(lens), used - set(lens)
+        assert all({"id", "has_data"} <= set(v) for v in lens["variables"])   # page maps v.id, filters ready ids
+    assert "lensList.find(l => l.id === id)" in html and "l.variables.map(v => v.id)" in html
+
+
+def test_every_preset_lens_exists_in_the_lenses_response_and_in_the_presets_response():
+    c = TestClient(__import__("app.main", fromlist=["app"]).app)
+    lens_ids = {l["id"] for l in c.get("/lenses").json()}
+    by_id = {l["id"]: l for l in c.get("/lenses").json()}
+    presets_resp = c.get("/presets").json()
+    assert presets_resp and all(p["lens"] in lens_ids for p in presets_resp)
+    for p in presets_resp:                                              # what a demo button needs
+        lens = by_id[p["lens"]]
+        assert lens["default_variable"] in [v["id"] for v in lens["variables"]]
+        assert c.get("/variables", params={"lens": p["lens"]}).json()    # the filtered list is non-empty
+
+
+def test_demo_selects_region_lens_and_variable_together():
+    demo = _page().split("async function demo")[1].split("async function run")[0]
+    assert "$('lens').value = p.lens" in demo and "await loadVars(want)" in demo
+    assert demo.index("$('lens').value = p.lens") < demo.index("await loadVars(want)") < demo.index("await run()")
+    assert "p.bbox.map(fmtCoord)" in demo
+
+
+def test_lens_load_failure_message_is_persistent_and_next_to_the_control():
+    html = _page()
+    assert 'id="lensStatus"' in html and "Couldn't load lenses" in html
+    assert "$('lensStatus').textContent" in html.split("async function init()")[1]
+    run = html.split("async function run()")[1].split("async function")[0]
+    assert "lensStatus" not in run                                      # run() must not clear it

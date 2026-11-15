@@ -41,6 +41,7 @@
   <section class="panel">
     <div class="row">
       <label>Lens <select id="lens"><option value="">None</option></select></label>
+      <span id="lensStatus" style="color:#b00020;font-size:.8rem;max-width:260px"></span>
       <label>Variable <select id="variable"></select></label>
       <label>West <input type="text" inputmode="decimal" class="coord" id="w" value="-117"></label>
       <label>South <input type="text" inputmode="decimal" class="coord" id="s" value="31.3"></label>
@@ -142,7 +143,9 @@ async function init() {
   } catch (e) {
     lensList = [];
     $('lens').disabled = true;
-    $('err').textContent = `Couldn't load lenses - is the server running the latest code? (${e.message})`;
+    // persistent, next to the control (the shared error line is cleared by every click)
+    $('lensStatus').textContent = `Couldn't load lenses (${e.message}) - is the server running the latest code? ` +
+      'Stop it with Ctrl+C and start it again. Demo buttons will set the region only.';
   }
   let presets = [];
   try { presets = await api('/presets'); } catch (e) {
