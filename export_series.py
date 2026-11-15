@@ -9,8 +9,12 @@ the cos(latitude)-weighted monthly regional mean with the SAME function the back
 plus data/series/index.yml. CSV values are in the stored-series units recorded as `units` in
 index.yml; `display_units` / `display_conversion` say how the app shows them.
 
-Nothing is skipped silently: every skip prints its reason (file missing, variable missing, or
-empty). Safe to re-run anywhere: for a skipped variable, previously exported series (e.g. made on
+Units are never guessed: the processed file's `units` attribute (written by pull_data.py from
+catalog.yml) must match the catalog, and every display conversion must be a known one
+(app/display.py); otherwise the variable is refused.
+
+Nothing is skipped silently: every skip prints its reason (file missing, variable missing, units
+mismatch, or empty). Safe to re-run anywhere: for a skipped variable, previously exported series (e.g. made on
 another machine) are kept. Output is deterministic: re-running on the same data gives no git diff.
 """
 import argparse
@@ -26,6 +30,8 @@ VARIABLES = [
     "M2TMNXSLV/T2M",
     "GPM_3IMERGM/precipitation",
     "M2TMNXRAD/SWGDN",
+    "M2TMNXRAD/CLDTOT",
+    "M2TMNXAER/TOTEXTTAU",
     "GLDAS_NOAH025_M/SoilMoi0_10cm_inst",
     "M2TMNXSLV/WIND50M",
     "GLDAS_NOAH025_M/Qs_acc",
@@ -44,15 +50,33 @@ def expected_var_name(entry: dict) -> str:
 
 
 def inspect_file(entry: dict) -> tuple[str | None, list]:
-    """(problem or None, variable names found). problem: 'file missing' / 'variable missing'."""
+    """(problem or None, variable names found).
+    problem: 'file missing' / 'variable missing' / 'units mismatch'."""
     path = common.processed_path(entry)
     if not path.exists():
         return f"file missing: {path.name} not in {path.parent}", []
+    name = expected_var_name(entry)
     with xr.open_dataset(path, engine=common.NC_ENGINE) as ds:
         found = list(ds.data_vars)
-    if expected_var_name(entry) not in found:
-        return (f"variable missing: {path.name} has {found}, expected '{expected_var_name(entry)}'"), found
+        file_units = ds[name].attrs.get("units") if name in found else None
+    if name not in found:
+        return (f"variable missing: {path.name} has {found}, expected '{name}'"), found
+    if file_units is not None and str(file_units) != str(entry["units"]):
+        return (f"units mismatch: {path.name} says units={file_units!r} but catalog.yml says "
+                f"{entry['units']!r}; fix the catalog (do not guess a conversion)"), found
     return None, found
+
+
+def check_conversions(variables) -> None:
+    """Refuse to start if any variable has an unknown display conversion (before writing anything)."""
+    bad = []
+    for var_id in variables:
+        try:
+            catalog_fields(data.find_entry(var_id))
+        except ValueError as ex:
+            bad.append(str(ex))
+    if bad:
+        raise SystemExit("export refused, unknown unit combination:\n  " + "\n  ".join(bad))
 
 
 def write_csv(ser, path):
@@ -108,6 +132,7 @@ def _keep_old(var_id, entry, region, old, new, report):
 
 def export(variables=VARIABLES) -> dict:
     """Run the export. Returns {"written": [...], "skipped": [(var, region|None, reason)], "kept": [...]}."""
+    check_conversions(variables)
     regions = presets.load_presets()
     common.SERIES_DIR.mkdir(parents=True, exist_ok=True)
     old = {(r["variable"], r["region"]): r for r in presets.read_index()}

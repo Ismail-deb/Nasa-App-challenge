@@ -126,7 +126,7 @@ def test_unit_labels():
     assert display.unit_label(cat["GLDAS_NOAH025_M/SoilMoi0_10cm_inst"]) == "kg/m² (= mm of water)"
     assert display.unit_label(cat["GPM_3IMERGM/precipitation"]) == "mm/month"
     assert display.unit_label(cat["M2TMNXAER/TOTEXTTAU"]) == "unitless"
-    assert display.unit_label(cat["M2TMNXRAD/CLDTOT"]) == "fraction (0 to 1)"
+    assert display.unit_label(cat["M2TMNXRAD/CLDTOT"]) == "% of sky"
     assert display.unit_label(cat["M2TMNXRAD/SWGDN"]) == "W/m²"
     assert display.unit_label(cat["GLDAS_NOAH025_M/Evap_tavg"]) == "mm/day"
     assert display.unit_label(cat["GLDAS_NOAH025_M/Snowf_tavg"]) == "mm/day"

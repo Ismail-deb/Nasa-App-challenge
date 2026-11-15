@@ -10,11 +10,15 @@ categories:
         short_name: M2TMNXAER
         version: "5.12.4"
         variable: TOTEXTTAU
-        units: "1"
+        units: "1"                  # file attribute units='1' (dimensionless); shown as stored
         unit_label: unitless
         description: >
           How much haze, dust, smoke and pollution particles in the air block sunlight.
           0 is perfectly clear; higher numbers mean hazier skies.
+        note: >
+          Aerosol optical depth, unitless; higher means more particles such as smoke or dust
+          blocking sunlight. MERRA-2 reanalysis (model plus satellite observations), a regional
+          monthly mean; not a site measurement.
       - id: M2TMNXRAD/SWGDN
         name: Sunlight reaching the ground
         short_name: M2TMNXRAD
@@ -29,9 +33,14 @@ categories:
         short_name: M2TMNXRAD
         version: "5.12.4"
         variable: CLDTOT
-        units: "1"
-        unit_label: fraction (0 to 1)
-        description: The fraction of the sky covered by cloud (0 = clear, 1 = fully overcast).
+        units: "1"                  # file attribute units='1': a fraction from 0 to 1
+        card_units: "%"             # display only: fraction x 100 = % of sky covered
+        unit_label: "% of sky"
+        description: How much of the sky is covered by cloud, from 0% (clear) to 100% (fully overcast).
+        note: >
+          Fraction of sky covered, displayed as %. Stored as a fraction from 0 to 1 and shown x 100;
+          a change per decade is in percentage points of sky. MERRA-2 reanalysis, a regional
+          monthly mean; not a site measurement.
       - id: M2TMNXSLV/TQV
         name: Total water vapour
         short_name: M2TMNXSLV

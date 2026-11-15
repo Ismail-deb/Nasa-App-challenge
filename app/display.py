@@ -22,6 +22,7 @@ UNIT_LABELS = {
     "mm/hr": "mm/hr",
     "mm/month": "mm/month",
     "mm/day": "mm/day",
+    "%": "%",
 }
 
 
@@ -46,6 +47,7 @@ def _conversion(entry: dict, series_units: str | None):
       kg m-2 s-1 (GLDAS *_tavg: mean of 3-h averages) -> mm/day:   x 86400   (1 kg/m2 water = 1 mm)
       kg m-2 with accumulation_hours: 3
                  (GLDAS *_acc: mean of 3-h totals)    -> mm/day:   x 8       (8 three-hour periods/day)
+      1 (MERRA-2 CLDTOT: fraction of sky, 0 to 1)     -> %:        x 100
     """
     card = entry.get("card_units")
     if not card:
@@ -60,6 +62,9 @@ def _conversion(entry: dict, series_units: str | None):
     elif card == "mm/day" and units == "kg m-2" and acc == 3:
         kind = ("constant", 8.0,
                 "monthly mean of 3-hour accumulations (kg/m2 per 3 h) x 8 = mm/day of water")
+    elif card == "%" and units == "1" and not acc:
+        kind = ("constant", 100.0,
+                "fraction of sky covered (0 to 1) x 100 = % of sky; a change is in percentage points")
     else:
         raise ValueError(f"{entry['id']}: no known conversion from stored units {units!r} "
                          f"(accumulation_hours={acc}) to {card!r}")
