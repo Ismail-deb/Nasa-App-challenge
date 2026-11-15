@@ -4,7 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Earth System Trend Detective</title>
-<script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js"></script>
+<!-- Plotly 2.35.2, vendored (MIT, web/vendor/plotly/LICENSE): no CDN needed -->
+<script src="/static/vendor/plotly/plotly.min.js"></script>
 <style>
   /* ---- design tokens (design/stitch DESIGN.md, written "Colors" section) ---- */
   @font-face {
@@ -506,7 +507,7 @@ async function run() {
         margin: {t: 8, r: 8, b: 40, l: 56}, legend: {orientation: 'h', y: -0.18}},
     {responsive: true, displayModeBar: false});
   } else {
-    $('err').textContent = 'The chart library could not be loaded (check the internet connection); results are shown below.';
+    $('err').textContent = 'The chart library (web/vendor/plotly) could not be loaded; results are shown below.';
     $('chartEmpty').textContent = 'The chart library could not be loaded; the result card still shows the numbers.';
     $('chartEmpty').hidden = false;
   }
