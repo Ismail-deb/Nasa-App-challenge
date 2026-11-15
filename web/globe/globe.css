@@ -30,3 +30,31 @@
 #globeNote { margin-left: 8px; padding: 1px 8px; border-radius: 10px; background: #3a2a00; color: #ffe08a; }
 /* Cesium's own credit bar: dim, readable on the dark globe */
 .globe-panel .cesium-widget-credits { opacity: .7; }
+
+/* trend-map panel (heatmap from data/maps/), top-left of the globe */
+.trend-panel {
+  position: absolute; z-index: 4; top: 10px; left: 10px; width: 250px; max-height: calc(100% - 20px);
+  overflow-y: auto; background: rgba(2, 14, 30, .9); border: 1px solid #12324f; border-radius: 6px;
+  padding: 8px 10px; font-size: .78rem; color: #cfefff;
+}
+.trend-panel[hidden], .trend-panel [hidden] { display: none !important; }
+.trend-panel label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.trend-switch { font-weight: 600; font-size: .85rem; }
+.trend-list { margin: 6px 0; display: grid; gap: 2px; }
+.trend-exp-toggle { color: #9fc9e0; margin-bottom: 4px; }
+.trend-opacity input { flex: 1; }
+.trend-caveat {
+  margin: 6px 0; padding: 6px 8px; border-left: 3px solid #ffb703; background: #3a2a00; color: #ffe08a;
+}
+.trend-legend { margin-top: 6px; }
+.trend-legend-title { font-weight: 600; margin-bottom: 3px; }
+.trend-bar { height: 10px; border-radius: 2px; border: 1px solid rgba(255, 255, 255, .25); }
+.trend-ticks { display: flex; justify-content: space-between; font-variant-numeric: tabular-nums; }
+.trend-units { color: #9fc9e0; }
+.trend-faded, .trend-desc, .trend-method { margin: 6px 0 0; }
+.trend-method { color: #9fc9e0; }
+.trend-info {
+  width: 18px; height: 18px; padding: 0; border-radius: 50%; border: 1px solid #4fd8ff;
+  background: transparent; color: #4fd8ff; font: italic 600 .75rem Georgia, serif; cursor: pointer;
+}
+.trend-panel input:focus-visible, .trend-info:focus-visible { outline: 2px solid #ffb703; outline-offset: 2px; }

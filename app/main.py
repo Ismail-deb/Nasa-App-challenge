@@ -2,9 +2,11 @@
 from pathlib import Path
 
 import math
+import re
 
+import yaml
 from fastapi import FastAPI, HTTPException, Response
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 import common
@@ -232,6 +234,31 @@ def local_config():
     path = LOCAL_CONFIG
     js = path.read_text(encoding="utf-8") if path.is_file() else NO_TOKEN_JS
     return Response(js, media_type="text/javascript", headers=NO_CACHE)
+
+
+# ---------------------------------------------------------------- per-cell trend maps (data/maps/, read-only)
+MAPS_DIR = common.ROOT / "data" / "maps"
+# only flat file names in data/maps, only these kinds: never a path into the rest of data/
+MAP_FILE = re.compile(r"^[A-Za-z0-9_.-]+\.(png|json|geojson)$")
+MAP_TYPES = {".png": "image/png", ".json": "application/json", ".geojson": "application/geo+json"}
+
+
+@app.get("/maps/index.json", include_in_schema=False)
+def maps_index():
+    """data/maps/index.yml as JSON (the browser has no YAML parser)."""
+    path = MAPS_DIR / "index.yml"
+    if not path.is_file():
+        raise HTTPException(404, "no trend maps")
+    with open(path, encoding="utf-8") as f:
+        return JSONResponse(yaml.safe_load(f), headers=NO_CACHE)
+
+
+@app.get("/maps/{name}", include_in_schema=False)
+def map_file(name: str):
+    path = MAPS_DIR / name
+    if not MAP_FILE.match(name) or ".." in name or not path.is_file() or path.resolve().parent != MAPS_DIR.resolve():
+        raise HTTPException(404, "not a map file")
+    return FileResponse(path, media_type=MAP_TYPES[path.suffix], headers=NO_CACHE)
 
 
 # vendored CesiumJS (frontend/vendor/cesium); missing directory -> 404s, and the globe falls back to Classic

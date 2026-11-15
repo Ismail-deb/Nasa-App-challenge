@@ -36,6 +36,30 @@ const visible = el => !!el && !el.hidden && el.getClientRects().length > 0;
                  panelShown: visible($('globePanel')), canvas: !!d.querySelector('#globeBox canvas')};
 
     if (G.status === 'ready') {
+      // the trend-map layer from data/maps/: loaded, nearest-neighbour, experimental layers hidden
+      const T = G.trend;
+      for (let i = 0; i < 300 && !['ready', 'failed'].includes(T.status); i++) await sleep(100);
+      for (let i = 0; i < 150 && T.layer && !T.layer.ready && T.status === 'ready'; i++) await sleep(100);
+      const rows = () => [...d.querySelectorAll('#trendPanel .trend-var')].map(r => [r.querySelector('input').value, visible(r)]);
+      const C = w.Cesium, L = T.layer;
+      out.trend = {status: T.status, key: T.key, panel: visible($('trendPanel')), layerReady: !!(L && L.ready),
+                   onTop: !!L && G.viewer.imageryLayers.indexOf(L) === G.viewer.imageryLayers.length - 1,
+                   nearest: !!L && L.minificationFilter === C.TextureMinificationFilter.NEAREST &&
+                            L.magnificationFilter === C.TextureMagnificationFilter.NEAREST,
+                   alpha: L && L.alpha, rows: rows(), caveat: visible(d.querySelector('.trend-caveat')),
+                   legend: d.querySelector('.trend-legend') && d.querySelector('.trend-legend').textContent};
+      if (T.status === 'ready') {
+        $('trendExperimental').click();
+        const soil = d.querySelector('#trendPanel input[value="SoilMoi0_10cm_inst"]');
+        soil.click();
+        out.trend.experimental = {rows: rows(), key: T.key, caveat: visible(d.querySelector('.trend-caveat')) &&
+                                  d.querySelector('.trend-caveat').textContent};
+        $('trendExperimental').click();
+        out.trend.back = {key: T.key, caveat: visible(d.querySelector('.trend-caveat'))};
+        $('trendOn').click();
+        out.trend.off = {show: T.layer.show};
+        $('trendOn').click();
+      }
       for (const id of G.regions) {
         $('cardTitle').textContent = ''; $('err').textContent = '';
         const ok = G.selectPreset(id);

@@ -8,6 +8,23 @@ import pytest
 import make_trend_maps as tm
 import stats
 
+# matplotlib / shapely / pyogrio (requirements-maps.txt) are only needed to regenerate data/maps,
+# not to run the app: without them, the tests that use them skip instead of failing.
+MAPS_LIBS = "only needed to regenerate data/maps: pip install -r requirements-maps.txt"
+
+
+def _have(module):
+    try:
+        __import__(module)
+        return True
+    except ImportError:
+        return False
+
+
+needs_matplotlib = pytest.mark.skipif(not _have("matplotlib"), reason=f"matplotlib not installed ({MAPS_LIBS})")
+needs_shapely = pytest.mark.skipif(not (_have("shapely") and _have("pyogrio")),
+                                   reason=f"shapely/pyogrio not installed ({MAPS_LIBS})")
+
 TIMES = pd.date_range("2001-01", periods=240, freq="MS")
 T = tm.decimal_years(TIMES)
 MONTHS = TIMES.month.to_numpy()
@@ -63,9 +80,8 @@ def test_bh_fdr_known_case_and_nan():
     assert not tm.bh_fdr(np.array([np.nan, np.nan])).any()
 
 
+@needs_shapely
 def test_us_mask_points():
-    pytest.importorskip("shapely")
-    pytest.importorskip("pyogrio")
     poly = tm.contiguous_us()
     assert poly is not None
     lats = np.array([38.5, 30.0, 43.7, 19.4, 45.0])
@@ -87,6 +103,7 @@ def test_land_fraction_aggregates_fine_grid():
     assert frac[:, 0].tolist() == [1.0, 1.0] and frac[:, 1].tolist() == [0.0, 0.0]
 
 
+@needs_matplotlib
 def test_compute_and_write_outputs(tmp_path):
     rng = np.random.default_rng(4)
     ny, nx = 4, 5

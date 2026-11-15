@@ -338,6 +338,6 @@ not in that lens.
   trends for different variables cover slightly different years.
 
 ## Credits
-- Guide artwork generated with AI.
+- Guide artwork generated with AI (Google Gemini).
 - Data: NASA GES DISC / Earthdata. MERRA-2: GMAO, NASA.
 - Learning material: NASA GES DISC tutorials, https://github.com/nasa/gesdisc-tutorials (read-only reference; not modified or included).

@@ -338,6 +338,16 @@ def test_globe_without_a_token_runs_offline_and_its_regions_run_the_demo_buttons
             assert s["lens"] == p["lens"] and s["variable"] in lenses.variables(p["lens"]), s
             assert s["err"] in ("", NO_CHART) and s["card"], s
         assert out["unknown"] is False                                  # only presets are clickable
+        t = out["trend"]                                                # trend map from data/maps/
+        assert t["status"] == "ready" and t["panel"] and t["key"] == "T2M" and t["layerReady"], t
+        assert t["nearest"] and t["onTop"] and t["alpha"] == 0.85 and not t["caveat"], t
+        hidden = {k for k, shown in t["rows"] if not shown}
+        assert hidden == {"SoilMoi0_10cm_inst", "Evap_tavg"}, t["rows"]   # experimental: hidden by default
+        assert "Change per decade" in t["legend"] and "not statistically significant (FDR 10%)" in t["legend"]
+        e = t["experimental"]
+        assert e["key"] == "SoilMoi0_10cm_inst" and all(shown for _, shown in e["rows"]), e
+        assert e["caveat"] and "artefacts" in e["caveat"], e
+        assert t["back"] == {"key": "T2M", "caveat": False} and t["off"] == {"show": False}, t
     c = out["classic"]
     assert c["toggle"] == [["Globe", "false"], ["Classic view", "true"]] and not c["panelShown"]
     assert c["card"] and c["err"] in ("", NO_CHART)                     # Classic view still works

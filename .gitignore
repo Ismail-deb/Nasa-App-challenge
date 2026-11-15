@@ -1,6 +1,7 @@
 # data: ignore everything (multi-GB) EXCEPT the small precomputed preset series
 data/*
 !data/series/
+!data/maps/
 data/series/*.part-*
 .env
 .netrc

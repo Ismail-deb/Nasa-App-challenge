@@ -232,6 +232,7 @@
     addRegions(C, v, presets, lensList);
     setupSpin(C, v);
     setupPointer(C, v);
+    setupTrendMaps(C, v);
     v.useDefaultRenderLoop = state.view === 'globe';
     state.status = 'ready';
   }
@@ -370,6 +371,238 @@
       last = now;
       if (globe.spinning) v.camera.rotate(C.Cartesian3.UNIT_Z, -SPIN_RAD_PER_S * dt);
     });
+  }
+
+  // ------------------------------------------------------------------ per-cell trend maps (data/maps/)
+  //
+  // Everything about a map (bounds, scale, units, caveat, description, method) is read from
+  // /maps/index.json (data/maps/index.yml) and each variable's /maps/<key>.json at runtime; nothing
+  // about the data is written in this file. A variable whose JSON has a "caveat" is experimental
+  // (known data artefacts) and is hidden until the viewer asks for it. If any of these files fails
+  // to load, the globe works as before and a small note replaces the panel.
+
+  var MAPS_URL = '/maps/';
+  var DEFAULT_MAP = 'T2M';                 // the layer shown first; falls back to the first stable one
+  var MAP_OPACITY = 0.85;
+  var MAPS_NOTE = 'Trend maps could not be loaded; the globe and the regions still work.';
+  var FADED_TEXT = 'Faded cells are not statistically significant (FDR 10%): we can\u2019t tell their ' +
+                   'change from natural variation.';
+  // colour bars by the colormap name in each JSON's scale (matplotlib RdBu_r: blue = min, red = max)
+  var COLORMAPS = {
+    RdBu_r: ['#053061', '#2166ac', '#4393c3', '#92c5de', '#d1e5f0', '#f7f7f7',
+             '#fddbc7', '#f4a582', '#d6604d', '#b2182b', '#67001f']
+  };
+
+  var trend = state.trend = {
+    status: 'idle', show: true, opacity: MAP_OPACITY, key: null, showExperimental: false,
+    variables: [], layer: null, layerFor: layerFor
+  };
+
+  // the imagery-layer options for one variable, from its JSON only (also read by the tests)
+  function layerFor(C, meta) {
+    var b = meta.bounds;
+    return {
+      url: MAPS_URL + meta.image,
+      rectangle: C.Rectangle.fromDegrees(b.west, b.south, b.east, b.north),
+      options: {
+        alpha: trend.opacity, show: trend.show,
+        // one pixel per grid cell: never smooth between cells
+        minificationFilter: C.TextureMinificationFilter.NEAREST,
+        magnificationFilter: C.TextureMagnificationFilter.NEAREST
+      }
+    };
+  }
+
+  function el(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text != null) e.textContent = text;
+    return e;
+  }
+
+  function fmt(x) {
+    var a = Math.abs(x);
+    return (a === 0 ? '0' : a >= 10 ? x.toFixed(0) : a >= 1 ? x.toFixed(1) : x.toPrecision(2)).replace(/^-/, '\u2212');
+  }
+
+  function unitsOf(meta) {
+    // the scale is in slope units ("°C per decade"); the legend title already says "per decade"
+    return String(meta.slope_units || meta.display_units || '').replace(/\s*per decade\s*$/, '');
+  }
+
+  function trendNote(text) {
+    state.trend.status = 'failed';
+    if (ui.trendPanel) ui.trendPanel.hidden = true;
+    ui.globeNote.textContent = ui.globeNote.hidden ? text : ui.globeNote.textContent + ' \u00b7 ' + text;
+    ui.globeNote.hidden = false;
+  }
+
+  function setupTrendMaps(C, v) {
+    trend.status = 'loading';
+    getJson(MAPS_URL + 'index.json').then(function (index) {
+      var entries = (index && index.variables) || [];
+      if (!entries.length) throw new Error('no variables');
+      return Promise.all(entries.map(function (e) { return getJson(MAPS_URL + e.metadata); }));
+    }).then(function (metas) {
+      if (v.isDestroyed()) return;
+      trend.variables = metas.map(function (m) {
+        return {key: m.key, name: m.name, meta: m, experimental: !!(m.caveat && String(m.caveat).trim())};
+      });
+      buildTrendPanel(C, v);
+      // online imagery added later (terrain mode) must stay under the trend map
+      v.imageryLayers.layerAdded.addEventListener(function (layer) {
+        if (trend.layer && layer !== trend.layer && !v.isDestroyed()) v.imageryLayers.raiseToTop(trend.layer);
+      });
+      var stable = trend.variables.filter(function (x) { return !x.experimental; });
+      var first = stable.filter(function (x) { return x.key === DEFAULT_MAP; })[0] || stable[0] || trend.variables[0];
+      selectMap(C, v, first.key);
+      trend.status = 'ready';
+    }).catch(function () { trendNote(MAPS_NOTE); });
+  }
+
+  function buildTrendPanel(C, v) {
+    var p = ui.trendPanel = el('div', 'trend-panel');
+    p.id = 'trendPanel';
+    p.setAttribute('role', 'region');
+    p.setAttribute('aria-label', 'Trend map');
+
+    var head = el('label', 'trend-switch');
+    var on = el('input');
+    on.type = 'checkbox'; on.id = 'trendOn'; on.checked = trend.show;
+    head.appendChild(on);
+    head.appendChild(el('span', null, 'Trend map'));
+    p.appendChild(head);
+
+    var body = el('div', 'trend-body');
+    p.appendChild(body);
+
+    var list = el('div', 'trend-list');
+    list.setAttribute('role', 'radiogroup');
+    list.setAttribute('aria-label', 'Variable');
+    trend.variables.forEach(function (x) {
+      var row = el('label', 'trend-var' + (x.experimental ? ' trend-experimental' : ''));
+      var r = el('input');
+      r.type = 'radio'; r.name = 'trendVar'; r.value = x.key;
+      row.appendChild(r);
+      row.appendChild(el('span', null, x.name));
+      row.hidden = x.experimental && !trend.showExperimental;
+      list.appendChild(row);
+    });
+    body.appendChild(list);
+
+    var expRow = el('label', 'trend-exp-toggle');
+    var exp = el('input');
+    exp.type = 'checkbox'; exp.id = 'trendExperimental'; exp.checked = trend.showExperimental;
+    expRow.appendChild(exp);
+    expRow.appendChild(el('span', null, 'Show experimental layers (known data artefacts)'));
+    expRow.hidden = !trend.variables.some(function (x) { return x.experimental; });
+    body.appendChild(expRow);
+
+    var opRow = el('label', 'trend-opacity');
+    opRow.appendChild(el('span', null, 'Opacity'));
+    var op = el('input');
+    op.type = 'range'; op.min = '0'; op.max = '1'; op.step = '0.05'; op.value = String(trend.opacity);
+    op.setAttribute('aria-label', 'Trend map opacity');
+    opRow.appendChild(op);
+    body.appendChild(opRow);
+
+    var caveat = el('p', 'trend-caveat');
+    caveat.setAttribute('role', 'note');
+    caveat.hidden = true;
+    body.appendChild(caveat);
+
+    var legend = el('div', 'trend-legend');
+    legend.appendChild(el('div', 'trend-legend-title', 'Change per decade'));
+    var bar = el('div', 'trend-bar');
+    legend.appendChild(bar);
+    var ticks = el('div', 'trend-ticks');
+    var tMin = el('span'), tMid = el('span', null, '0'), tMax = el('span');
+    ticks.appendChild(tMin); ticks.appendChild(tMid); ticks.appendChild(tMax);
+    legend.appendChild(ticks);
+    var units = el('div', 'trend-units');
+    legend.appendChild(units);
+    legend.appendChild(el('p', 'trend-faded', FADED_TEXT));
+    body.appendChild(legend);
+
+    var desc = el('p', 'trend-desc');
+    var info = el('button', 'trend-info', 'i');
+    info.type = 'button';
+    info.setAttribute('aria-expanded', 'false');
+    info.setAttribute('aria-label', 'How this map was made');
+    info.title = 'How this map was made';
+    var descText = el('span');
+    desc.appendChild(descText);
+    desc.appendChild(document.createTextNode(' '));
+    desc.appendChild(info);
+    body.appendChild(desc);
+    var method = el('p', 'trend-method');
+    method.hidden = true;
+    body.appendChild(method);
+
+    ui.trend = {on: on, body: body, list: list, exp: exp, op: op, caveat: caveat, bar: bar,
+                tMin: tMin, tMax: tMax, units: units, desc: descText, info: info, method: method};
+
+    on.addEventListener('change', function () {
+      trend.show = on.checked;
+      body.hidden = !on.checked;
+      if (trend.layer) trend.layer.show = trend.show;
+    });
+    op.addEventListener('input', function () {
+      trend.opacity = Number(op.value);
+      if (trend.layer) trend.layer.alpha = trend.opacity;
+    });
+    list.addEventListener('change', function (ev) {
+      if (ev.target && ev.target.name === 'trendVar') selectMap(C, v, ev.target.value);
+    });
+    exp.addEventListener('change', function () { setExperimental(C, v, exp.checked); });
+    info.addEventListener('click', function () {
+      method.hidden = !method.hidden;
+      info.setAttribute('aria-expanded', String(!method.hidden));
+    });
+
+    ui.box.parentNode.appendChild(p);
+  }
+
+  function setExperimental(C, v, shown) {
+    trend.showExperimental = shown;
+    [].forEach.call(ui.trend.list.querySelectorAll('.trend-experimental'), function (row) { row.hidden = !shown; });
+    var cur = trend.variables.filter(function (x) { return x.key === trend.key; })[0];
+    if (!shown && cur && cur.experimental) {
+      var stable = trend.variables.filter(function (x) { return !x.experimental; });
+      var back = stable.filter(function (x) { return x.key === DEFAULT_MAP; })[0] || stable[0];
+      if (back) selectMap(C, v, back.key);
+    }
+  }
+
+  function selectMap(C, v, key) {
+    var x = trend.variables.filter(function (y) { return y.key === key; })[0];
+    if (!x || v.isDestroyed()) return;
+    var m = x.meta, t = ui.trend;
+    trend.key = key;
+    [].forEach.call(t.list.querySelectorAll('input[name="trendVar"]'), function (r) { r.checked = r.value === key; });
+
+    // legend and texts, all from the variable's JSON
+    t.caveat.textContent = x.experimental ? 'Experimental: ' + m.caveat : '';
+    t.caveat.hidden = !x.experimental;
+    var stops = COLORMAPS[m.scale && m.scale.colormap] || COLORMAPS.RdBu_r;
+    t.bar.style.background = 'linear-gradient(to right, ' + stops.join(', ') + ')';
+    t.tMin.textContent = fmt(m.scale.min);
+    t.tMax.textContent = fmt(m.scale.max);
+    t.units.textContent = unitsOf(m);
+    t.desc.textContent = m.description || '';
+    t.method.textContent = m.method || '';
+
+    // the heatmap: one imagery layer, swapped on change
+    if (trend.layer) { v.imageryLayers.remove(trend.layer, true); trend.layer = null; }
+    var cfg = layerFor(C, m);
+    var layer = C.ImageryLayer.fromProviderAsync(
+      C.SingleTileImageryProvider.fromUrl(cfg.url, {rectangle: cfg.rectangle}), cfg.options);
+    quiet(layer.errorEvent);
+    layer.errorEvent.addEventListener(function () {
+      if (trend.layer === layer) trendNote(MAPS_NOTE);
+    });
+    trend.layer = layer;
+    v.imageryLayers.add(layer);
   }
 
   // ------------------------------------------------------------------ start
