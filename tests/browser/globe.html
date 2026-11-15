@@ -11,6 +11,7 @@ const visible = el => !!el && !el.hidden && el.getClientRects().length > 0;
 (async () => {
   try {
     try { localStorage.setItem('estd.guide.enabled', 'off'); localStorage.setItem('estd.guide.tutorialSeen', '1'); } catch (e) {}
+    try { localStorage.setItem('estd.globe.stage', 'map'); } catch (e) {}   // saved Terrain map: offline must still open Earth
     const f = document.getElementById('f');
     if (!f.contentDocument || f.contentDocument.readyState !== 'complete' || f.contentWindow.location.href === 'about:blank')
       await new Promise(r => f.addEventListener('load', r, {once: true}));
@@ -68,6 +69,12 @@ const visible = el => !!el && !el.hidden && el.getClientRects().length > 0;
                     minZoom: v.scene.screenSpaceCameraController.minimumZoomDistance,
                     maxZoom: v.scene.screenSpaceCameraController.maximumZoomDistance,
                     requestRenderMode: v.scene.requestRenderMode};
+      // Terrain map: offline (no token), so its button is disabled with a note and Earth stays as it is
+      const mapBtn = d.querySelector('#stageModes [data-stage="map"]');
+      out.stage = {stage: G.stage, available: G.mapAvailable, disabled: !!(mapBtn && mapBtn.disabled), note: $('stageNote').textContent,
+                   noteShown: visible($('stageNote')), entered: G.setStage('map'), after: G.stage, chips: visible($('mapRegions')),
+                   mapPanel: visible($('mapPanel')), earthTopDown: visible($('globeTopDown')), material: !!v.scene.globe.material,
+                   sky: !!(v.scene.skyAtmosphere && v.scene.skyAtmosphere.show), body: d.body.dataset.stage};
       G.setExaggeration(2.5); G.setTerrainOn(false);
       out.relief.saved = {terrain: w.localStorage.getItem('estd.globe.terrain'), ex: w.localStorage.getItem('estd.globe.exaggeration'),
                           read: G.readSettings(), offlineEx: v.scene.verticalExaggeration};
@@ -90,6 +97,14 @@ const visible = el => !!el && !el.hidden && el.getClientRects().length > 0;
       out.topDown = {pitch: Math.round(C2.Math.toDegrees(v.camera.pitch))};
       G.showUS(true);
       await sleep(2500);
+      // a slow (software-rendered) flight can still be moving: wait until the camera is still before clicking
+      for (let i = 0, last = null; i < 40; i++) {
+        const now = v.camera.positionWC.clone();
+        if (last && C2.Cartesian3.distance(now, last) < 1) break;
+        last = now;
+        v.scene.requestRender();
+        await sleep(250);
+      }
       const x = T.variables.find(y => y.key === T.key);
       for (let i = 0; i < 100 && !x.cells; i++) await sleep(100);
       // a known significant cell from the file: decoded by the page, then clicked on screen

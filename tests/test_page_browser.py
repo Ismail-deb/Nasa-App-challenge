@@ -427,6 +427,12 @@ def test_globe_without_a_token_runs_offline_and_its_regions_run_the_demo_buttons
         assert r["collision"] and r["minZoom"] == 2000 and r["maxZoom"] == 25000000 and r["requestRenderMode"], r
         assert r["saved"] == {"terrain": "off", "ex": "2.5", "read": {"terrainOn": False, "exaggeration": 2.5}, "offlineEx": 1}, r
         assert r["clamped"] == 3, r
+        # Terrain map: offline, so disabled with its note; a saved "map" and a direct call both stay on Earth
+        st = out["stage"]
+        assert st["stage"] == "earth" and st["available"] is False and st["disabled"], st
+        assert st["noteShown"] and st["note"] == "Terrain map needs the Cesium token and an internet connection", st
+        assert st["entered"] is False and st["after"] == "earth" and st["body"] == "earth", st
+        assert not st["chips"] and not st["mapPanel"] and st["earthTopDown"] and not st["material"], st
         # the US outline is served and drawn; Central Valley's label only when zoomed in
         assert out["outline"]["status"] == "ready" and out["outline"]["rings"] >= 1 and out["outline"]["entities"] == out["outline"]["rings"]
         assert out["labels"] == {"southwest": "always", "great_plains": "always", "pacific_northwest": "always", "central_valley": "near"}

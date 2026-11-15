@@ -122,6 +122,27 @@
 .cell-rows .cell-yes { color: var(--teal-strong, #176E7B); font-weight: 800; }
 .cell-rows .cell-no { color: var(--ink-2, #6B4A3A); }
 
+/* the mode switch above the stage: "Earth | Terrain map", the region chips (Terrain map only) and the note */
+.stage-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 0 0 12px; font-size: .875rem; }
+.stage-bar [hidden], .relief-panel[hidden] { display: none !important; }
+.stage-modes { display: inline-flex; padding: 4px; border-radius: 999px; background: rgba(6, 24, 32, .9); border: 1px solid rgba(255, 255, 255, .14); }
+.stage-modes button {
+  min-height: 32px; padding: 4px 16px; border: 0; border-radius: 999px; background: transparent; color: #9EEFFF;
+  font: inherit; font-weight: 600; cursor: pointer;
+}
+.stage-modes button:hover:not(:disabled) { background: rgba(255, 255, 255, .1); }
+.stage-modes button[aria-pressed="true"] { background: var(--teal-strong, #176E7B); color: #fff; font-weight: 800; }
+.stage-modes button:disabled { opacity: .45; cursor: not-allowed; }
+.map-regions { display: flex; flex-wrap: wrap; gap: 6px; }
+.map-chip { min-height: 32px; padding: 4px 12px; border-radius: 999px; background: rgba(6, 24, 32, .9); color: #9EEFFF;
+            border: 1px solid rgba(60, 224, 208, .45); font: inherit; font-weight: 700; cursor: pointer; }
+.map-chip:hover { background: var(--teal-strong, #176E7B); color: #fff; }
+.stage-modes button:focus-visible, .map-chip:focus-visible { outline: 3px solid var(--cyan, #3CE0D0); outline-offset: 2px; }
+.stage-note { padding: 2px 10px; border-radius: 999px; background: #113A4A; color: #9EEFFF; border: 1px solid rgba(31, 138, 154, .4); font-weight: 600; }
+/* Terrain map: the hologram glow around the stage */
+body[data-stage="map"] .globe-stage { box-shadow: inset 0 0 40px rgba(0, 0, 0, .45), 0 0 0 1px rgba(60, 224, 208, .35), 0 0 24px -4px rgba(60, 224, 208, .35); }
+.map-panel { flex-direction: row; flex-wrap: wrap; align-items: center; }
+
 /* small screens: the controls and the legend sit under the globe instead of on top of it */
 @media (max-width: 767px) {
   .globe-panel { padding: 12px; }

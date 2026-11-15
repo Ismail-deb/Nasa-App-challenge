@@ -26,13 +26,25 @@
   //                                  fewer pixels and coarser tiles
   //   labels.clearDeg, nearOnlyM     a region label closer than clearDeg to a bigger region's label is shown
   //                                  only within nearOnlyM of the camera (or on hover)
+  //   terrainMap                     the "Terrain map" mode: tilt, zoom range around the focused region
+  //                                  (maxZoomFactor x the distance that shows it whole), its own height slider,
+  //                                  stage colours, contour lines (colour, width in pixels, the step in metres
+  //                                  for each camera height: the first row whose height is not below the camera's),
+  //                                  the cyan height ramp, and how much of the lines shows through a trend-map cell
   var GLOBE_CONFIG = {
     "terrain": {"assetId": 1, "timeoutMs": 8000, "exaggerationMin": 1, "exaggerationMax": 3,
                 "exaggerationStep": 0.25, "exaggerationDefault": 1.5, "maximumScreenSpaceError": 3,
                 "requestVertexNormals": false},
     "camera": {"pitchDeg": -40, "minZoomM": 2000, "maxZoomM": 25000000},
     "render": {"requestRenderMode": true, "softwareResolutionScale": 0.75, "softwareMaximumScreenSpaceError": 4},
-    "labels": {"clearDeg": 9, "nearOnlyM": 3500000}
+    "labels": {"clearDeg": 9, "nearOnlyM": 3500000},
+    "terrainMap": {"pitchDeg": -40, "minZoomM": 1500, "maxZoomFactor": 3, "maxZoomM": 9000000,
+                   "exaggerationMin": 1, "exaggerationMax": 4, "exaggerationStep": 0.25, "exaggerationDefault": 2,
+                   "background": "#0B2530", "baseColor": "#0B2530",
+                   "contour": {"color": "#3CE0D0", "alpha": 0.75, "widthPx": 1.25,
+                               "spacingByCameraHeight": [[30000, 25], [150000, 100], [500000, 250], [1500000, 500], [100000000, 1000]]},
+                   "ramp": {"low": "#0B3A44", "high": "#5FE6E0", "alphaLow": 0.0, "alphaHigh": 0.4, "maxHeightM": 4000},
+                   "underTrend": 0.15}
   };
   var CESIUM_BASE = '/vendor/cesium/';
   var CONFIG_URL = '/frontend/config.local.js';
@@ -44,6 +56,13 @@
   var SPIN_RAD_PER_S = 0.03;          // slow idle rotation
   var OFFLINE_NOTE = 'Globe running in offline mode, no terrain';
   var FAILED_NOTE = 'The globe could not start here (offline mode); showing Classic view.';
+  var MAP = GLOBE_CONFIG.terrainMap;   // the "Terrain map" mode (a second setup of the same viewer)
+  var KEY_STAGE = 'estd.globe.stage';                         // "earth" | "map" (missing = earth)
+  var KEY_MAP_EXAGGERATION = 'estd.map.exaggeration';         // the Terrain map's own height slider
+  var KEY_MAP_CONTOURS = 'estd.map.contours';                 // "on" | "off" (missing = on)
+  var KEY_MAP_TREND = 'estd.map.trend';                       // "on" | "off" (missing = on)
+  var MAP_OFFLINE_NOTE = 'Terrain map needs the Cesium token and an internet connection';
+  var MAP_LOADING_NOTE = 'Terrain map: loading the terrain\u2026';
   var CYAN = '#3CE0D0';                // the design's stage glow
   var INK = '#3A2218', CREAM = '#FBF3E4';   // region label chips: ink on cream
 
@@ -51,7 +70,8 @@
   var state = window.EstdGlobe = {
     view: 'classic', status: 'idle', mode: null, note: '', regions: [], config: GLOBE_CONFIG,
     chooseMode: chooseMode, selectPreset: null, showRegions: null, showUS: null, topDown: null,
-    readSettings: readSettings, setTerrainOn: null, setExaggeration: null, labelRules: labelRules
+    readSettings: readSettings, setTerrainOn: null, setExaggeration: null, labelRules: labelRules,
+    stage: 'earth', setStage: null, readMapSettings: readMapSettings, chooseStage: chooseStage, mapAvailable: false
   };
 
   // ---- saved terrain settings (localStorage may be blocked: then the defaults, and nothing is saved)
@@ -70,6 +90,19 @@
   function readSettings() {
     return {terrainOn: store(KEY_TERRAIN) !== 'off', exaggeration: clampExaggeration(store(KEY_EXAGGERATION))};
   }
+
+  // ---- Terrain map settings (same storage rules: blocked storage gives the defaults)
+  function clampMapExaggeration(x) {
+    var n = Number(x);
+    if (!isFinite(n) || x === null || x === '') return MAP.exaggerationDefault;
+    return Math.min(MAP.exaggerationMax, Math.max(MAP.exaggerationMin, n));
+  }
+  function readMapSettings() {
+    return {exaggeration: clampMapExaggeration(store(KEY_MAP_EXAGGERATION)), contours: store(KEY_MAP_CONTOURS) !== 'off',
+            trend: store(KEY_MAP_TREND) !== 'off', stage: store(KEY_STAGE) === 'map' ? 'map' : 'earth'};
+  }
+  // the mode to open in: the saved one, but Terrain map only when terrain can load (a token and a network)
+  function chooseStage(saved, mode) { return saved === 'map' && mode === 'terrain' ? 'map' : 'earth'; }
 
   // which region labels are shown only near the camera: those whose centre is within clearDeg of the
   // centre of a bigger region (bigger box = keeps its label from afar). Read from the boxes, not by name.
@@ -167,6 +200,14 @@
     panel.className = 'panel globe-panel';
     panel.hidden = true;
     panel.innerHTML =
+      '<div class="stage-bar">' +
+        '<div id="stageModes" class="stage-modes" role="group" aria-label="Map mode">' +
+          '<button type="button" data-stage="earth" aria-pressed="true">Earth</button>' +
+          '<button type="button" data-stage="map" aria-pressed="false" disabled>Terrain map</button>' +
+        '</div>' +
+        '<div id="mapRegions" class="map-regions" role="group" aria-label="Go to a region" hidden></div>' +
+        '<span id="stageNote" class="stage-note" hidden></span>' +
+      '</div>' +
       '<div class="globe-stage">' +
         '<div id="globeBox"></div>' +
         '<div id="globeRegions" aria-hidden="true"></div>' +
@@ -182,10 +223,15 @@
 
     ui = {bar: bar, note: note, panel: panel, box: $('globeBox'), tip: $('globeTip'),
           status: $('globeStatus'), globeNote: $('globeNote'),
-          globeBtn: bar.querySelector('[data-view="globe"]')};
+          globeBtn: bar.querySelector('[data-view="globe"]'), modes: $('stageModes'),
+          mapBtn: $('stageModes').querySelector('[data-stage="map"]'), stageNote: $('stageNote'), chips: $('mapRegions')};
     bar.addEventListener('click', function (ev) {
       var b = ev.target.closest && ev.target.closest('button[data-view]');
       if (b && !b.disabled) setView(b.dataset.view);
+    });
+    ui.modes.addEventListener('click', function (ev) {
+      var b = ev.target.closest && ev.target.closest('button[data-stage]');
+      if (b && !b.disabled && state.setStage) state.setStage(b.dataset.stage);
     });
     return true;
   }
@@ -329,6 +375,7 @@
     setupTerrainPanel(C, v);
     setupOutline(C, v);
     setupTrendMaps(C, v);
+    setupMapMode(C, v, presets);
     v.useDefaultRenderLoop = state.view === 'globe';
     state.status = 'ready';
     flag('globe', 'ready');
@@ -344,15 +391,18 @@
   }
 
   function goOffline(C, v) {
+    if (tmap.active && !v.isDestroyed()) exitMap(C, v);      // no terrain: back to Earth, which works offline
     globe.terrain = null;
     if (!v.isDestroyed()) { v.terrainProvider = new C.EllipsoidTerrainProvider(); applyRelief(C, v); }
     state.mode = 'offline';
     showOfflineNote();
+    syncStageBar();
   }
 
   // the relief as the switch and the slider say: real terrain (exaggerated) or the smooth ellipsoid
   function applyRelief(C, v) {
     if (v.isDestroyed()) return;
+    if (tmap.active) return applyMapRelief(C, v);   // Terrain map: always the terrain, at its own height
     var on = !!globe.terrain && globe.terrainOn;
     var want = on ? globe.terrain : null;
     if (want && v.terrainProvider !== want) v.terrainProvider = want;
@@ -375,6 +425,8 @@
         });
         globe.terrain = terrain;
         applyRelief(C, v);                       // the user may have switched terrain off: then not drawn
+        syncStageBar();                          // Terrain map can be used now
+        if (chooseStage(readMapSettings().stage, state.mode) === 'map') enterMap(C, v);   // the mode it was left in
         // sharper online imagery on top of the bundled one; on failure the bundled one stays
         withTimeout(C.IonImageryProvider.fromAssetId(2), TERRAIN_TIMEOUT_MS).then(function (p) {
           if (v.isDestroyed()) return;
@@ -393,7 +445,8 @@
 
   // the boxes float above the highest ground in them, also when the relief is stretched
   function updateBoxHeights(C) {
-    var h = globe.boxHeight = BOX_HEIGHT * (globe.terrain && globe.terrainOn ? globe.exaggeration : 1);
+    var h = globe.boxHeight = tmap.active ? BOX_HEIGHT * tmap.exaggeration
+                                          : BOX_HEIGHT * (globe.terrain && globe.terrainOn ? globe.exaggeration : 1);
     globe.boxes.forEach(function (info) {
       var b = info.preset.bbox;
       info.box.rectangle.height = h;
@@ -409,6 +462,7 @@
     var range = Math.min(sphere.radius / Math.sin(fovy / 2), GLOBE_CONFIG.camera.maxZoomM);
     // the pitch is taken at the box's centre; seen from the camera, the Earth's curve adds to it, so less here
     var pitch = C.Math.toRadians(GLOBE_CONFIG.camera.pitchDeg);
+    if (tmap.active) pitch = C.Math.toRadians(MAP.pitchDeg);       // the Terrain map's "table" tilt
     pitch = Math.min(pitch + range * Math.cos(pitch) / v.scene.globe.ellipsoid.maximumRadius, -0.1);
     v.camera.cancelFlight();
     v.camera.flyToBoundingSphere(sphere, {
@@ -491,6 +545,7 @@
       closeCell();
       globe.current = id;
       var p = info.preset;
+      if (tmap.active) mapLimits(C, v, p.bbox);       // Terrain map: the zoom range follows the focused region
       flyTilted(C, v, p.bbox, function () {
         var chart = $('chart');
         if (chart && chart.scrollIntoView) chart.scrollIntoView({behavior: reduced() ? 'auto' : 'smooth', block: 'start'});
@@ -616,6 +671,7 @@
       return cache.corners;
     });
     state.showRegions = function () {
+      if (tmap.active) { focusMap(C, v, usBox()); return; }      // Terrain map: every region is in the US view
       stopSpin();
       v.camera.cancelFlight();
       v.camera.setView({destination: C.Cartesian3.fromDegrees(HOME.lon, HOME.lat, HOME.height)});
@@ -766,6 +822,7 @@
 
     // a tilted view of the whole country (from the outline's own extent); before it loads: the first view
     state.showUS = function (tilted) {
+      if (tmap.active) { focusMap(C, v, usBox()); return; }
       stopSpin();
       closeCell();
       if (tilted && globe.outline) { flyTilted(C, v, globe.outline.bbox); return; }
@@ -1099,15 +1156,13 @@
                 tMin: tMin, tMax: tMax, units: units, desc: descText, info: info, method: method};
 
     on.addEventListener('change', function () {
-      trend.show = on.checked;
-      body.hidden = card.hidden = !on.checked;
-      if (trend.layer) trend.layer.show = trend.show;
-      if (!trend.show) closeCell();
-      v.scene.requestRender();
+      setTrendShow(v, on.checked);
+      if (tmap.active) store(KEY_MAP_TREND, on.checked ? 'on' : 'off');      // the Terrain map keeps its own choice
     });
     op.addEventListener('input', function () {
       trend.opacity = Number(op.value);
       if (trend.layer) trend.layer.alpha = trend.opacity;
+      updateCover();
       v.scene.requestRender();
     });
     list.addEventListener('change', function (ev) {
@@ -1119,8 +1174,22 @@
       info.setAttribute('aria-expanded', String(!method.hidden));
     });
 
+    body.hidden = card.hidden = !trend.show;        // the Terrain map may have switched it off before this was built
     ui.box.parentNode.appendChild(p);
     ui.box.parentNode.appendChild(card);
+  }
+
+  // the "Trend map" switch (both modes): the layer, the controls and the legend
+  function setTrendShow(v, yes) {
+    trend.show = !!yes;
+    if (ui.trend && trend.status !== 'failed') {
+      ui.trend.on.checked = trend.show;
+      ui.trend.body.hidden = ui.trendLegend.hidden = !trend.show;
+    }
+    if (trend.layer) trend.layer.show = trend.show;
+    if (!trend.show) closeCell();
+    updateCover();
+    if (!v.isDestroyed()) v.scene.requestRender();
   }
 
   function setExperimental(C, v, shown) {
@@ -1165,7 +1234,330 @@
     v.imageryLayers.add(layer);
     closeCell();
     cellsFor(key).catch(function () { /* no readout for this variable; the map still shows */ });
+    updateCover();                                   // Terrain map: the lines fade under the new variable's cells
     v.scene.requestRender();
+  }
+
+  // ------------------------------------------------------------------ Terrain map mode
+  //
+  // A second setup of the same viewer (never a second viewer), chosen with "Earth | Terrain map" at the top
+  // of the stage: no sky, ground atmosphere, fog, sun, moon or stars; the photo imagery hidden over a dark
+  // flat base; cyan contour lines and a faint single-hue cyan height ramp drawn by one globe material; a
+  // tilted "table" camera with its zoom range around the focused region. Leaving it puts back every one of
+  // those exactly as they were (tmap.saved) and frees the material. Terrain map needs real terrain: without
+  // a token or a network (offline mode) its button stays disabled with a note, and Earth works as before.
+
+  var tmap = state.terrainMap = {active: false, saved: null, material: null, offCamera: null, hidden: [],
+                                 exaggeration: MAP.exaggerationDefault, contours: true, focus: null, spacing: null, presets: []};
+
+  // the contour step in metres for a camera height (the first row whose height is not below it)
+  function contourSpacing(cameraHeight) {
+    var rows = MAP.contour.spacingByCameraHeight;
+    for (var i = 0; i < rows.length; i++) if (cameraHeight <= rows[i][0]) return rows[i][1];
+    return rows[rows.length - 1][1];
+  }
+  state.contourSpacing = contourSpacing;
+
+  // The globe material. Lines: the test of Cesium's ElevationContour material (a line where the height is
+  // within a screen-space width of a multiple of the step), on the true height (the terrain's height divided
+  // by the exaggeration, so a step stays the same number of metres when the relief is stretched). Under it a
+  // single-hue cyan ramp, transparent at sea level. The globe draws its material over the imagery, so the
+  // trend map would sit under the lines: tmCover (the heatmap's own picture, nearest-neighbour) fades both
+  // to underTrend wherever a heatmap cell is, and the heatmap reads as lying on top of the contours.
+  var MAP_SHADER = [
+    'czm_material czm_getMaterial(czm_materialInput materialInput)',
+    '{',
+    '    czm_material material = czm_getDefaultMaterial(materialInput);',
+    '    float h = materialInput.height / max(tmExaggeration, 1.0);',
+    '    vec4 ramp = mix(tmLow, tmHigh, clamp(h / tmRampMax, 0.0, 1.0));',
+    '    float line = 0.0;',
+    '    if (tmLines > 0.5) {',
+    '#if (__VERSION__ == 300 || defined(GL_OES_standard_derivatives))',
+    '        float dF = max(abs(dFdx(h)), abs(dFdy(h))) * czm_pixelRatio * tmWidth;',
+    '#else',
+    '        float dF = czm_pixelRatio * tmWidth;',
+    '#endif',
+    '        line = mod(h, tmSpacing) < dF ? tmColor.a : 0.0;',
+    '    }',
+    '    vec3 rgb = line > 0.0 ? tmColor.rgb : ramp.rgb;',
+    '    float a = max(ramp.a, line);',
+    '    if (tmCoverAlpha > 0.0) {',
+    '        vec3 p = (czm_inverseView * vec4(-materialInput.positionToEyeEC, 1.0)).xyz;',
+    '        vec3 n = normalize(p * czm_ellipsoidInverseRadii * czm_ellipsoidInverseRadii);',
+    '        vec2 ll = vec2(degrees(atan(n.y, n.x)), degrees(asin(clamp(n.z, -1.0, 1.0))));',
+    '        vec2 uv = (ll - tmCoverRect.xy) / (tmCoverRect.zw - tmCoverRect.xy);',
+    '        if (uv.x >= 0.0 && uv.x <= 1.0 && uv.y >= 0.0 && uv.y <= 1.0) {',
+    '            a *= 1.0 - tmCoverAlpha * texture(tmCover, uv).a;',
+    '        }',
+    '    }',
+    '    material.diffuse = rgb;',
+    '    material.alpha = a;',
+    '    return material;',
+    '}'
+  ].join('\n');
+
+  function makeMaterial(C) {
+    var c = MAP.contour, r = MAP.ramp, color = function (css, a) { return C.Color.fromCssColorString(css).withAlpha(a); };
+    return new C.Material({
+      fabric: {
+        type: 'EstdTerrainMap',
+        uniforms: {
+          tmColor: color(c.color, c.alpha), tmWidth: c.widthPx, tmSpacing: contourSpacing(Infinity),
+          tmLines: tmap.contours ? 1 : 0, tmExaggeration: tmap.exaggeration,
+          tmLow: color(r.low, r.alphaLow), tmHigh: color(r.high, r.alphaHigh), tmRampMax: r.maxHeightM,
+          tmCover: C.Material.DefaultImageId, tmCoverRect: new C.Cartesian4(0, 0, 1, 1), tmCoverAlpha: 0
+        },
+        source: MAP_SHADER
+      },
+      translucent: false,
+      // the heatmap's picture: one pixel per grid cell, never smoothed (as the layer itself)
+      minificationFilter: C.TextureMinificationFilter.NEAREST,
+      magnificationFilter: C.TextureMagnificationFilter.NEAREST
+    });
+  }
+
+  // where the trend map is, and how much it covers the lines (none when it is off)
+  function updateCover() {
+    var m = tmap.material, C = window.Cesium;
+    if (!m || !C) return;
+    var x = trend.variables.filter(function (y) { return y.key === trend.key; })[0];
+    if (x) {
+      var b = x.meta.bounds;
+      m.uniforms.tmCover = MAPS_URL + x.meta.image;
+      m.uniforms.tmCoverRect = new C.Cartesian4(b.west, b.south, b.east, b.north);
+    }
+    var on = !!(x && trend.show && trend.layer);
+    m.uniforms.tmCoverAlpha = on ? (1 - MAP.underTrend) * Math.min(1, trend.opacity / MAP_OPACITY) : 0;
+  }
+
+  // the contour step follows the camera height
+  function updateSpacing(v) {
+    if (!tmap.material || v.isDestroyed()) return;
+    var g = v.camera.positionCartographic, step = contourSpacing(g ? g.height : Infinity);
+    if (step === tmap.spacing) return;
+    tmap.spacing = step;
+    tmap.material.uniforms.tmSpacing = step;
+    v.scene.requestRender();
+  }
+
+  function applyMapRelief(C, v) {
+    if (globe.terrain && v.terrainProvider !== globe.terrain) v.terrainProvider = globe.terrain;
+    v.scene.verticalExaggeration = tmap.exaggeration;
+    if (tmap.material) {
+      tmap.material.uniforms.tmExaggeration = tmap.exaggeration;
+      tmap.material.uniforms.tmLines = tmap.contours ? 1 : 0;
+    }
+    state.relief = {terrain: true, exaggeration: tmap.exaggeration};
+    updateBoxHeights(C);
+    syncMapPanel();
+    v.scene.requestRender();
+  }
+
+  // "Whole US": the outline's own extent; before it loads, the box around every preset region
+  function usBox() {
+    if (globe.outline) return globe.outline.bbox;
+    var b = tmap.presets.map(function (p) { return p.bbox; });
+    if (!b.length) return null;
+    return [Math.min.apply(null, b.map(function (x) { return x[0]; })), Math.min.apply(null, b.map(function (x) { return x[1]; })),
+            Math.max.apply(null, b.map(function (x) { return x[2]; })), Math.max.apply(null, b.map(function (x) { return x[3]; }))];
+  }
+
+  // zoom range around a [west, south, east, north] box: from minZoomM up to maxZoomFactor x the distance that shows it whole
+  function mapLimits(C, v, b) {
+    var sphere = C.BoundingSphere.fromRectangle3D(C.Rectangle.fromDegrees(b[0], b[1], b[2], b[3]));
+    var fovy = (v.camera.frustum && v.camera.frustum.fovy) || 1;
+    var range = sphere.radius / Math.sin(fovy / 2), ctl = v.scene.screenSpaceCameraController;
+    ctl.minimumZoomDistance = MAP.minZoomM;
+    ctl.maximumZoomDistance = Math.min(MAP.maxZoomM, Math.max(range * MAP.maxZoomFactor, MAP.minZoomM * 10));
+    tmap.focus = b.slice();
+  }
+
+  function focusMap(C, v, b) {
+    if (!b) return;
+    stopSpin();
+    closeCell();
+    mapLimits(C, v, b);
+    flyTilted(C, v, b);
+  }
+
+  // an imagery layer that is not the trend map is hidden in Terrain map (and shown again on leaving)
+  function hideBase(layer) {
+    if (layer && layer !== trend.layer && layer.show) { layer.show = false; tmap.hidden.push(layer); }
+  }
+
+  function enterMap(C, v) {
+    if (tmap.active || !state.mapAvailable || v.isDestroyed()) return false;
+    stopSpin();
+    closeCell();
+    var scene = v.scene, cam = v.camera, ctl = scene.screenSpaceCameraController, s = readMapSettings();
+    tmap.saved = {
+      view: {destination: C.Cartesian3.clone(cam.positionWC), orientation: {heading: cam.heading, pitch: cam.pitch, roll: cam.roll}},
+      minZoom: ctl.minimumZoomDistance, maxZoom: ctl.maximumZoomDistance, collision: ctl.enableCollisionDetection,
+      sky: scene.skyAtmosphere ? scene.skyAtmosphere.show : false, ground: scene.globe.showGroundAtmosphere,
+      fog: scene.fog ? scene.fog.enabled : false, sun: scene.sun ? scene.sun.show : false, moon: scene.moon ? scene.moon.show : false,
+      background: C.Color.clone(scene.backgroundColor), baseColor: C.Color.clone(scene.globe.baseColor),
+      percent: cam.percentageChanged, trendShow: trend.show
+    };
+    tmap.active = true;
+    state.stage = 'map';
+    flag('stage', 'map');
+    store(KEY_STAGE, 'map');
+    // the hologram look
+    if (scene.skyAtmosphere) scene.skyAtmosphere.show = false;
+    if (scene.sun) scene.sun.show = false;
+    if (scene.moon) scene.moon.show = false;
+    if (scene.fog) scene.fog.enabled = false;
+    scene.globe.showGroundAtmosphere = false;
+    scene.backgroundColor = C.Color.fromCssColorString(MAP.background);
+    scene.globe.baseColor = C.Color.fromCssColorString(MAP.baseColor);
+    tmap.hidden = [];
+    for (var i = 0; i < v.imageryLayers.length; i++) hideBase(v.imageryLayers.get(i));
+    tmap.exaggeration = s.exaggeration;
+    tmap.contours = s.contours;
+    tmap.material = scene.globe.material = makeMaterial(C);
+    // the camera: never underground, the contour step follows its height
+    ctl.enableCollisionDetection = true;
+    cam.percentageChanged = 0.05;
+    tmap.offCamera = cam.changed.addEventListener(function () { updateSpacing(v); });
+    setTrendShow(v, s.trend);
+    updateSpacing(v);
+    applyRelief(C, v);
+    syncStageBar();
+    var cur = globe.current && globe.byEntity['preset:' + globe.current];
+    focusMap(C, v, cur ? cur.preset.bbox : usBox());
+    return true;
+  }
+
+  function exitMap(C, v) {
+    if (!tmap.active) return false;
+    var s = tmap.saved, scene = v.scene, cam = v.camera, ctl = scene.screenSpaceCameraController;
+    tmap.active = false;
+    state.stage = 'earth';
+    flag('stage', 'earth');
+    store(KEY_STAGE, 'earth');
+    if (tmap.offCamera) { tmap.offCamera(); tmap.offCamera = null; }
+    var old = tmap.material;
+    scene.globe.material = undefined;
+    tmap.material = null;
+    tmap.spacing = null;
+    // freed once the globe has dropped it (it is still in this frame's draw commands)
+    if (old) window.setTimeout(function () { try { if (!old.isDestroyed()) old.destroy(); } catch (e) { /* already gone */ } }, 1000);
+    cam.percentageChanged = s.percent;
+    if (scene.skyAtmosphere) scene.skyAtmosphere.show = s.sky;
+    if (scene.sun) scene.sun.show = s.sun;
+    if (scene.moon) scene.moon.show = s.moon;
+    if (scene.fog) scene.fog.enabled = s.fog;
+    scene.globe.showGroundAtmosphere = s.ground;
+    scene.backgroundColor = s.background;
+    scene.globe.baseColor = s.baseColor;
+    tmap.hidden.forEach(function (layer) { if (!layer.isDestroyed()) layer.show = true; });
+    tmap.hidden = [];
+    ctl.minimumZoomDistance = s.minZoom;
+    ctl.maximumZoomDistance = s.maxZoom;
+    ctl.enableCollisionDetection = s.collision;
+    tmap.focus = null;
+    tmap.saved = null;
+    setTrendShow(v, s.trendShow);
+    applyRelief(C, v);                                // Earth's own terrain switch and height again
+    syncStageBar();
+    cam.cancelFlight();
+    cam.flyTo({destination: s.view.destination, orientation: s.view.orientation, duration: reduced() ? 0 : 1.5});
+    keepDrawing(v, reduced() ? 0 : 1.5);
+    return true;
+  }
+
+  // the mode switch, the note, the chips and which bottom-left controls are shown
+  function syncStageBar() {
+    if (!ui.mapBtn) return;
+    var can = state.mapAvailable = state.mode === 'terrain' && !!globe.terrain;
+    var note = state.mode === 'offline' ? MAP_OFFLINE_NOTE : can ? '' : MAP_LOADING_NOTE;
+    ui.mapBtn.disabled = !can;
+    ui.mapBtn.title = note;
+    ui.stageNote.textContent = note;
+    ui.stageNote.hidden = !note;
+    [].forEach.call(ui.modes.querySelectorAll('button[data-stage]'), function (b) {
+      b.setAttribute('aria-pressed', String(b.dataset.stage === state.stage));
+    });
+    ui.chips.hidden = !tmap.active;
+    if (ui.relief) ui.relief.panel.hidden = tmap.active;
+    if (ui.map) ui.map.panel.hidden = !tmap.active;
+  }
+
+  function syncMapPanel() {
+    var m = ui.map;
+    if (!m) return;
+    m.range.value = String(tmap.exaggeration);
+    m.out.textContent = fmtTimes(tmap.exaggeration);
+    m.lines.checked = tmap.contours;
+  }
+
+  function setupMapMode(C, v, presets) {
+    tmap.presets = presets;
+    // region chips (top bar): the camera goes there; a box click still loads the trend
+    function chip(label, box, id) {
+      var b = el('button', 'map-chip', label);
+      b.type = 'button';
+      b.dataset.region = id;
+      b.addEventListener('click', function () { if (tmap.active) focusMap(C, v, box()); });
+      ui.chips.appendChild(b);
+    }
+    presets.forEach(function (p) { chip(shortName(p.name), function () { return p.bbox; }, p.id); });
+    chip('Whole US', usBox, 'us');
+
+    // bottom-left controls of this mode: height slider, contours switch, Top-down
+    var p = el('div', 'relief-panel map-panel');
+    p.id = 'mapPanel';
+    p.setAttribute('role', 'group');
+    p.setAttribute('aria-label', 'Terrain map');
+    p.hidden = true;
+    var height = el('label', 'relief-height');
+    height.id = 'mapHeight';
+    height.appendChild(el('span', null, 'Terrain height'));
+    var range = el('input');
+    range.type = 'range'; range.id = 'mapExaggeration';
+    range.min = String(MAP.exaggerationMin); range.max = String(MAP.exaggerationMax); range.step = String(MAP.exaggerationStep);
+    range.setAttribute('aria-label', 'Terrain map height (vertical exaggeration)');
+    height.appendChild(range);
+    var out = el('output', 'relief-value');
+    out.setAttribute('aria-hidden', 'true');
+    height.appendChild(out);
+    var sw = el('label', 'trend-switch relief-switch');
+    sw.id = 'mapContours';
+    var lines = el('input');
+    lines.type = 'checkbox'; lines.id = 'mapContoursOn';
+    lines.setAttribute('aria-label', 'Contour lines on or off');
+    sw.appendChild(lines);
+    sw.appendChild(el('span', null, 'Contours'));
+    var top = el('button', 'relief-btn', 'Top-down');
+    top.type = 'button'; top.id = 'mapTopDown';
+    top.title = 'Look straight down again';
+    p.appendChild(height);
+    p.appendChild(sw);
+    p.appendChild(top);
+    ui.map = {panel: p, height: height, range: range, out: out, sw: sw, lines: lines, top: top};
+    ui.box.parentNode.appendChild(p);
+
+    range.addEventListener('input', function () {
+      tmap.exaggeration = clampMapExaggeration(range.value);
+      store(KEY_MAP_EXAGGERATION, String(tmap.exaggeration));
+      if (tmap.active) applyRelief(C, v);
+    });
+    lines.addEventListener('change', function () {
+      tmap.contours = lines.checked;
+      store(KEY_MAP_CONTOURS, lines.checked ? 'on' : 'off');
+      if (tmap.active) applyRelief(C, v);
+    });
+    top.addEventListener('click', function () { topDown(C, v); });
+    // imagery that arrives later (the online imagery) stays hidden while in Terrain map
+    v.imageryLayers.layerAdded.addEventListener(function (layer) { if (tmap.active) hideBase(layer); });
+
+    state.setStage = function (s) { return s === 'map' ? enterMap(C, v) : exitMap(C, v); };
+    var saved = readMapSettings();
+    tmap.exaggeration = saved.exaggeration;
+    tmap.contours = saved.contours;
+    flag('stage', 'earth');
+    syncMapPanel();
+    syncStageBar();
   }
 
   // ------------------------------------------------------------------ start
