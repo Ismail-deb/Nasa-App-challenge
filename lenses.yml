@@ -1,0 +1,83 @@
+# Lenses: plain-language interpretation templates for a trend result. Templates only - no AI,
+# no yield or financial models. A message is chosen by (lens, variable, direction, significance):
+#   direction    = sign of Sen's slope (increasing / decreasing)
+#   significance = the trend test's `significant` flag
+# Not significant -> `not_significant`. Low reliability (too little snow to test) -> no message.
+# Every message ends with `disclaimer`. default_variable: what a preset demo button selects
+# (if it has no data for that region yet, the first lens variable that does).
+disclaimer: Long-term regional screening only. Not a substitute for site measurements or local advice.
+not_significant: No significant change detected yet; a longer record may reveal a trend.
+
+lenses:
+  solar:
+    name: Solar
+    default_variable: M2TMNXRAD/SWGDN
+    description: How long-term changes in sunlight, cloud, haze and heat may affect solar panels in a region.
+    caveat: >
+      Regional monthly averages from MERRA-2 reanalysis. Panel output also depends on panel type,
+      tilt, shading, soiling and local weather.
+    templates:
+      M2TMNXRAD/SWGDN:
+        increasing: Sunlight reaching the ground has increased in this region, pointing to slightly more solar energy available to panels on average.
+        decreasing: Sunlight reaching the ground has decreased in this region, pointing to slightly less solar energy available to panels on average.
+      M2TMNXRAD/CLDTOT:
+        increasing: Cloud cover has increased in this region; more cloud generally means less sunlight reaching panels.
+        decreasing: Cloud cover has decreased in this region; less cloud generally means more sunlight reaching panels.
+      M2TMNXAER/TOTEXTTAU:
+        increasing: Aerosols (haze, smoke, dust) have increased in this region; more aerosol generally means less sunlight reaching panels.
+        decreasing: Aerosols (haze, smoke, dust) have decreased in this region; less aerosol generally means more sunlight reaching panels.
+      M2TMNXSLV/T2M:
+        increasing: Air temperature has risen in this region. Hotter panels convert sunlight slightly less efficiently (for common silicon panels, roughly 0.3 to 0.5% less output per °C of panel temperature); warming does not itself reduce the sunlight available.
+        decreasing: Air temperature has fallen in this region. Cooler panels convert sunlight slightly more efficiently; cooling does not itself change the sunlight available.
+
+  wind:
+    name: Wind
+    default_variable: M2TMNXSLV/WIND50M
+    description: How long-term changes in wind speed at 50 m above ground may affect wind energy in a region.
+    caveat: >
+      Indicative only. The 50 m wind is the speed of the monthly-mean wind from reanalysis, which
+      underestimates typical wind speeds; only on-site measurement can assess a wind resource.
+    templates:
+      M2TMNXSLV/WIND50M:
+        increasing: Wind speed at 50 m above ground, below the height of modern turbine hubs (typically 80 to 120 m), has increased in this region. This indicates a relative change only, not the wind resource at any site.
+        decreasing: Wind speed at 50 m above ground, below the height of modern turbine hubs (typically 80 to 120 m), has decreased in this region. This indicates a relative change only, not the wind resource at any site.
+
+  hydro:
+    name: Hydro
+    default_variable: GLDAS_NOAH025_M/SWE_inst
+    description: How long-term changes in precipitation, runoff and snowpack may affect water available for hydropower in a region.
+    caveat: >
+      Satellite and model estimates averaged over a large region. Runoff is not river flow, and
+      reservoir inflow also depends on upstream areas, groundwater and dam operations.
+    templates:
+      GPM_3IMERGM/precipitation:
+        increasing: Precipitation has increased in this region, pointing to more water entering the area on average; how much reaches rivers and reservoirs also depends on evaporation, soils and snow storage.
+        decreasing: Precipitation has decreased in this region, pointing to less water entering the area on average; how much reaches rivers and reservoirs also depends on evaporation, soils and snow storage.
+      GLDAS_NOAH025_M/Qs_acc:
+        increasing: Surface runoff has increased in this region. Runoff is a water-availability proxy, not river flow; it suggests more water running off the land on average.
+        decreasing: Surface runoff has decreased in this region. Runoff is a water-availability proxy, not river flow; it suggests less water running off the land on average.
+      GLDAS_NOAH025_M/SWE_inst:
+        increasing: Snow water equivalent (water stored as snow) has increased in this region, which can mean more snowmelt feeding spring and summer inflow.
+        decreasing: Snow water equivalent (water stored as snow) has decreased in this region. Less stored snow can reduce spring and summer inflow to rivers and reservoirs.
+
+  farming:
+    name: Farming
+    default_variable: GLDAS_NOAH025_M/SoilMoi0_10cm_inst
+    description: How long-term changes in rain, topsoil moisture, heat and evaporation may affect farm water conditions in a region.
+    caveat: >
+      Regional averages; conditions on a farm depend on soil, crop, irrigation and local weather.
+      The soil-moisture and evaporation model (GLDAS) does not include irrigation. Not irrigation
+      scheduling or yield advice.
+    templates:
+      GPM_3IMERGM/precipitation:
+        increasing: Precipitation has increased in this region, pointing to more water from rain and snow on average; this says nothing about timing within the season or about heavy-rain events.
+        decreasing: Precipitation has decreased in this region, pointing to less water from rain and snow on average, which may mean more reliance on irrigation or stored water.
+      GLDAS_NOAH025_M/SoilMoi0_10cm_inst:
+        increasing: Topsoil moisture (top 10 cm) has increased in this region on average, pointing to wetter conditions for seedlings and shallow roots in rain-fed land.
+        decreasing: Topsoil moisture (top 10 cm) has decreased in this region on average, pointing to drier conditions for seedlings and shallow roots in rain-fed land.
+      M2TMNXSLV/T2M:
+        increasing: Air temperature has risen in this region, which can raise crop water demand and heat stress on average; effects differ by crop and season.
+        decreasing: Air temperature has fallen in this region, which can lower crop water demand on average; effects differ by crop and season.
+      GLDAS_NOAH025_M/Evap_tavg:
+        increasing: Evaporation from soil and plants has increased in this region. This can mean higher water demand and irrigation needs, but it can also simply reflect more water being available to evaporate.
+        decreasing: Evaporation from soil and plants has decreased in this region. This can mean lower water demand, or that the soil has less water left to evaporate; compare with soil moisture and precipitation.

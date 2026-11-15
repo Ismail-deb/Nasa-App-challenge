@@ -9,7 +9,7 @@ from fastapi.staticfiles import StaticFiles
 
 import common
 import stats
-from app import data, display, presets
+from app import data, display, lenses, presets
 
 WEB = Path(__file__).resolve().parent.parent / "web"
 app = FastAPI(title="Earth System Trend Detective")
@@ -46,10 +46,33 @@ def _periods() -> dict:
     return out
 
 
+def _lens_variables(lens: str) -> list:
+    try:
+        return lenses.variables(lens)
+    except KeyError:
+        raise HTTPException(404, f"Unknown lens {lens!r}. Lenses: {', '.join(lenses.load()['lenses'])}.")
+
+
+@app.get("/lenses")
+def list_lenses():
+    """The lenses, their variables (and whether each has any data yet), caveat and disclaimer."""
+    cfg, avail = lenses.load(), {v["id"]: v["has_data"] for v in variables()}
+    return [{"id": lid, "name": l["name"], "description": l["description"],
+             "caveat": lenses.caveat(lid), "disclaimer": cfg["disclaimer"],
+             "default_variable": l["default_variable"],
+             "variables": [{"id": v, "has_data": avail.get(v, False)} for v in l["templates"]]}
+            for lid, l in cfg["lenses"].items()]
+
+
 @app.get("/variables")
-def variables(category: str | None = None):
+def variables(category: str | None = None, lens: str | None = None):
+    """Catalog variables; with `lens`, only that lens's variables, in lens order."""
     out, periods = [], _periods()
-    for c, e in common.iter_entries(common.load_catalog(), category):
+    entries = list(common.iter_entries(common.load_catalog(), category))
+    if lens:
+        order = _lens_variables(lens)
+        entries = sorted((ce for ce in entries if ce[1]["id"] in order), key=lambda ce: order.index(ce[1]["id"]))
+    for c, e in entries:
         gridded, regions = common.processed_path(e).exists(), _preset_regions_with_series(e)
         start, end = periods.get(e["id"], (None, None))
         out.append({"id": e["id"], "category": c, "name": e["name"],
@@ -129,8 +152,12 @@ def _reliability(entry: dict, ser, units: str) -> dict | None:
 
 @app.get("/trend")
 def trend(variable: str, bbox: str, start: str | None = None, end: str | None = None,
-          deseasonalize: bool = True, method: str = "corrected"):
-    """method = corrected (autocorrelation-corrected Mann-Kendall, default) or plain."""
+          deseasonalize: bool = True, method: str = "corrected", lens: str | None = None):
+    """method = corrected (autocorrelation-corrected Mann-Kendall, default) or plain.
+    lens = solar | wind | hydro | farming (optional): adds lens_message and lens_caveat."""
+    if lens and variable not in _lens_variables(lens):
+        raise HTTPException(400, f"Variable {variable!r} is not in the {lens} lens. "
+                                 f"Its variables are: {', '.join(lenses.variables(lens))}.")
     entry, ser, source, region, units = _series(variable, bbox, start, end)
     try:
         r = stats.analyze(ser, deseasonalize=deseasonalize, method=method)
@@ -152,7 +179,11 @@ def trend(variable: str, bbox: str, start: str | None = None, end: str | None = 
         "fitted": _values(fitted_shown.reindex(ser.index)),   # same length as values; gaps -> null
         **{k: (round(v, 5) if isinstance(v, float) else v) for k, v in r.items()},
         **{k: (round(v, 5) if isinstance(v, float) else v) for k, v in shown.items()},
-        "lens_message": None,   # lenses arrive after Step 1 is confirmed
+        "lens": lens,
+        # template sentence + disclaimer; None without a lens or when reliability is "low"
+        "lens_message": (lenses.message(lens, variable, r["slope_per_decade"], r["significant"],
+                                        shown["reliability"]) if lens else None),
+        "lens_caveat": lenses.caveat(lens) if lens else None,
         "source": source,       # "preset_series" (data/series/) or "gridded" (data/processed/)
         "region": region,       # preset id when the bbox matches one, else null
     }

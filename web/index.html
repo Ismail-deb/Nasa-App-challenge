@@ -39,6 +39,7 @@
 <main>
   <section class="panel">
     <div class="row">
+      <label>Lens <select id="lens"><option value="">None</option></select></label>
       <label>Variable <select id="variable"></select></label>
       <label>West <input type="number" id="w" step="0.5" value="-117"></label>
       <label>South <input type="number" id="s" step="0.5" value="31.3"></label>
@@ -68,12 +69,14 @@
       <div><span>Record length</span><b id="len"></b></div>
     </div>
     <p id="plain"></p>
+    <p id="lensMsg" class="hidden"></p>
+    <p id="lensCaveat" class="hidden" style="font-size:.85rem;color:#5b6b7b"></p>
     <p id="cardNote" style="font-size:.85rem;color:#6a5200"></p>
   </section>
 </main>
 <script>
 const $ = id => document.getElementById(id);
-let vars = [];
+let vars = [], lensList = [];
 
 async function api(path) {
   const r = await fetch(path);
@@ -89,31 +92,51 @@ function showDesc() {
     (v && v.period_start ? ` Data available ${v.period_start} to ${v.period_end}.` : '');
 }
 
-async function init() {
-  vars = await api('/variables');
+// the variable dropdown shows only the selected lens's variables (all variables for "None")
+async function loadVars(keep) {
+  const lens = $('lens').value;
+  vars = await api('/variables' + (lens ? '?lens=' + encodeURIComponent(lens) : ''));
   $('variable').innerHTML = vars.map(v => `<option value="${v.id}">${v.name} – ${v.units}${v.has_data ? '' : ' (no data yet)'}</option>`).join('');
-  $('variable').onchange = showDesc;
+  if (keep && vars.some(v => v.id === keep)) $('variable').value = keep;
   showDesc();
-  const presets = await api('/presets');
-  $('demos').innerHTML = presets.map(p =>
-    `<button class="secondary" data-id="${p.id}" title="${p.why || ''}">Demo: ${p.name} (${p.lens})</button>`).join(' ');
-  $('demos').querySelectorAll('button').forEach(b => b.onclick = () => demo(presets.find(p => p.id === b.dataset.id)));
 }
 
-function demo(p) {
+async function init() {
+  lensList = await api('/lenses');
+  $('lens').innerHTML = '<option value="">None</option>' +
+    lensList.map(l => `<option value="${l.id}" title="${l.description}">${l.name}</option>`).join('');
+  $('lens').onchange = () => loadVars($('variable').value).catch(e => $('err').textContent = e.message);
+  $('variable').onchange = showDesc;
+  await loadVars();
+  const presets = await api('/presets');
+  const lensName = id => (lensList.find(l => l.id === id) || {name: id}).name;
+  $('demos').innerHTML = presets.map(p =>
+    `<button class="secondary" data-id="${p.id}" title="${p.why || ''}">Demo: ${p.name} (${lensName(p.lens)})</button>`).join(' ');
+  $('demos').querySelectorAll('button').forEach(b => b.onclick = () =>
+    demo(presets.find(p => p.id === b.dataset.id)).catch(e => $('err').textContent = 'Something went wrong: ' + e.message));
+}
+
+// a demo button selects its region, its lens and the lens's default variable
+// (or, if that has no data for this region yet, the first lens variable that does)
+async function demo(p) {
   [$('w').value, $('s').value, $('e').value, $('n').value] = p.bbox;
-  // pick a variable that is ready for this preset, keeping the current one if it is
-  if (p.variables.length && !p.variables.includes($('variable').value)) {
-    $('variable').value = p.variables[0];
-    showDesc();
-  }
-  run().catch(e => $('err').textContent = 'Something went wrong: ' + e.message);
+  $('lens').value = p.lens;
+  const l = lensList.find(x => x.id === p.lens);
+  const ready = l.variables.map(v => v.id).filter(id => p.variables.includes(id));
+  await loadVars(ready.includes(l.default_variable) ? l.default_variable : (ready[0] || l.default_variable));
+  await run();
 }
 
 async function run() {
   $('err').textContent = '';
+  const v = vars.find(x => x.id === $('variable').value);
+  if (v && !v.has_data) {
+    $('err').textContent = `${v.name}: data not available yet. It will appear here once it has been exported; try another variable.`;
+    return;
+  }
   const bbox = [$('w').value, $('s').value, $('e').value, $('n').value].join(',');
   const q = new URLSearchParams({variable: $('variable').value, bbox, deseasonalize: $('deseason').checked});
+  if ($('lens').value) q.set('lens', $('lens').value);
   if ($('start').value) q.set('start', $('start').value);
   if ($('end').value) q.set('end', $('end').value);
   let d;
@@ -140,6 +163,10 @@ async function run() {
   $('len').textContent = `${d.record_years.toFixed(1)} years (${d.dates[0]} to ${d.dates[d.dates.length - 1]})`;
   $('cardNote').textContent = d.note ? 'Note: ' + d.note : '';
   $('plain').textContent = d.explanation;
+  $('lensMsg').textContent = d.lens_message || '';
+  $('lensMsg').classList.toggle('hidden', !d.lens_message);
+  $('lensCaveat').textContent = d.lens_caveat ? 'Lens caveat: ' + d.lens_caveat : '';
+  $('lensCaveat').classList.toggle('hidden', !d.lens_caveat);
   $('card').classList.remove('hidden');
 }
 

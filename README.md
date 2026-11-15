@@ -3,8 +3,9 @@
 NASA Space Apps Challenge project. Pick an Earth-science variable measured by NASA missions or models, pick a region and time period, and see **what is changing, where, by how much, and whether the change is statistically significant**. A secondary "lens" layer translates results for renewable-energy providers and farmers (long-term regional screening only).
 
 > Status: prototype. Four demo regions (US Southwest, Great Plains, Pacific Northwest, California
-> Central Valley) work out of the box with temperature, precipitation, soil moisture and 50 m wind.
-> Lenses and the interactive globe are still to come.
+> Central Valley) work out of the box with temperature, precipitation, soil moisture, 50 m wind,
+> runoff, evaporation, snow and aerosol optical depth. Four lenses (solar, wind, hydro, farming)
+> add a plain-language sentence to the result. The interactive globe is still to come.
 
 ## Run the app (quick start)
 
@@ -61,8 +62,10 @@ If `uvicorn` is "not recognized", the environment is not active; use
 `python -m uvicorn app.main:app --port 8000` instead, or activate it first.
 
 ### 5. Use it
-1. Pick a **variable** from the dropdown (its description and data period appear underneath).
-2. Click one of the **Demo** buttons, or type a region (West, South, East, North in degrees)
+1. Optionally pick a **lens** (Solar, Wind, Hydro, Farming): the variable dropdown then shows
+   only that lens's variables, and the result card adds a plain-language sentence and caveat.
+   Pick a **variable** from the dropdown (its description and data period appear underneath).
+2. Click one of the **Demo** buttons (each selects its region, its lens and a default variable), or type a region (West, South, East, North in degrees)
    and a time period, then click **Show trend**.
 3. Read the chart (monthly values with the trend line) and the result card (change per decade,
    95% range, p-value, verdict, and notes on the data).
@@ -286,6 +289,21 @@ significant decrease); treat it with care. Every other snow series is at least t
 (Great Plains SWE 4.05 mm = 2.0x, Great Plains snow depth 2.54 cm = 2.5x). The thresholds were set
 from the 1 cm anchor above, not tuned to these results. Snow depth is shown in cm (not m), and a significant change is always shown with enough
 digits (never "about 0").
+
+## Lenses
+
+`lenses.yml` holds four lenses (solar, wind, hydro, farming). Each lists catalog variables and,
+for each variable, one template sentence for a significant increase and one for a significant
+decrease; the direction comes from the sign of Sen's slope and the significance from the trend
+test. Not significant gives "No significant change detected yet; a longer record may reveal a
+trend." Every lens message ends with "Long-term regional screening only. Not a substitute for site
+measurements or local advice.", and each lens has its own caveat. There are no lens messages for
+low-reliability results (see *Snow* above). The templates are fixed text: no AI, no yield or
+financial models, no site-level feasibility or irrigation scheduling.
+
+API: `GET /lenses`; `GET /variables?lens=solar` (only that lens's variables); `GET
+/trend?...&lens=solar` adds `lens_message` and `lens_caveat`, with a 400 error if the variable is
+not in that lens.
 
 ## Data sources
 - NASA GES DISC, accessed with `earthaccess`: MERRA-2 `M2TMNXSLV` (temperature, 50 m wind),

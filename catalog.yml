@@ -78,7 +78,7 @@ categories:
         variable: [U50M, V50M]
         derive: speed            # sqrt(U50M^2 + V50M^2)
         units: m s-1
-        description: How fast the wind blows about 50 metres up (turbine hub height); see the note on how it is computed.
+        description: How fast the wind blows about 50 metres up (below modern turbine hubs); see the note on how it is computed.
         note: >
           50 m wind speed computed from monthly-mean wind components (speed of the mean vector);
           it underestimates average wind speed and is useful for relative change over time, not
