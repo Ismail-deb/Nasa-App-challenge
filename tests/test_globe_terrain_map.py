@@ -141,3 +141,28 @@ def test_no_cesium_token_in_tracked_files():
         except (UnicodeDecodeError, OSError):
             continue
         assert not jwt.search(text), f"a token-like string is in {name}"
+
+
+# ---------------------------------------------------------------- the heatmap over the relief, and performance
+
+def test_the_heatmap_is_reused_and_stays_on_top_of_the_contours():
+    assert GLOBE_JS.count("= layerFor(C, ") == 1                     # one heatmap layer, built in one place
+    enter = _body("enterMap")
+    assert "layerFor" not in enter and "buildTrendPanel" not in enter and "setupCellTracker" not in enter
+    assert "layer !== trend.layer" in _body("hideBase")              # the heatmap is never hidden with the base
+    # the globe material is drawn over the imagery, so it fades wherever a heatmap cell is
+    cover = _body("updateCover")
+    assert "m.uniforms.tmCover = MAPS_URL + x.meta.image;" in cover and "b.west, b.south, b.east, b.north" in cover
+    assert "(1 - MAP.underTrend)" in cover and "trend.show && trend.layer" in cover
+    for name in ("selectMap", "setTrendShow"):
+        assert "updateCover();" in _body(name), name
+    assert "a *= 1.0 - tmCoverAlpha * texture(tmCover, uv).a;" in GLOBE_JS
+
+
+def test_terrain_map_keeps_the_render_settings_and_releases_what_it_set_up():
+    enter, leave = _body("enterMap"), _body("exitMap")
+    for s in (enter, leave):                                          # Earth's render-on-demand / software settings stay
+        assert "requestRenderMode" not in s and "resolutionScale" not in s and "maximumScreenSpaceError" not in s
+    assert "tmap.material = null;" in leave and "tmap.hidden = [];" in leave and "tmap.saved = null;" in leave
+    assert "if (step === tmap.spacing) return;" in _body("updateSpacing")    # redraws only when the step changes
+    assert "cam.percentageChanged = s.percent;" in leave

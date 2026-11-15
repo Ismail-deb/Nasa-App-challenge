@@ -26,6 +26,7 @@ def _const(name: str):
 NAME = _const("GUIDE_NAME")
 STEPS = _const("GUIDE_STEPS")
 GLOBE_STEPS = _const("GUIDE_STEPS_GLOBE")
+MAP_STEPS = _const("GUIDE_STEPS_MAP")
 GLOBE_JS = (WEB / "globe" / "globe.js").read_text(encoding="utf-8")
 TIPS = _const("GUIDE_TIPS")
 GREETING = _const("GUIDE_GREETING")
@@ -33,7 +34,7 @@ PAGE_IDS = set(re.findall(r'\bid="([^"]+)"', PAGE))
 # Globe view's elements are built by web/globe/globe.js: ids written in its markup or set as .id = '...'
 GLOBE_IDS = set(re.findall(r'\bid="([^"]+)"', GLOBE_JS)) | set(re.findall(r"\.id = '([^']+)'", GLOBE_JS))
 # every tutorial: (view, the ids its targets may use, its steps)
-TOURS = {"classic": (PAGE_IDS, STEPS), "globe": (PAGE_IDS | GLOBE_IDS, GLOBE_STEPS)}
+TOURS = {"classic": (PAGE_IDS, STEPS), "globe": (PAGE_IDS | GLOBE_IDS, GLOBE_STEPS), "map": (PAGE_IDS | GLOBE_IDS, MAP_STEPS)}
 ALL_STEPS = [(view, step) for view, (_, steps) in TOURS.items() for step in steps]
 
 
@@ -73,18 +74,19 @@ def test_classic_tutorial_steps_are_unchanged_and_in_order():
 
 
 def test_globe_tutorial_is_a_separate_list_with_its_steps_in_order():
-    assert [s["id"] for s in GLOBE_STEPS] == ["globe", "regions", "terrain", "switch", "variables", "legend", "cell",
+    assert [s["id"] for s in GLOBE_STEPS] == ["globe", "modes", "regions", "terrain", "switch", "variables", "legend", "cell",
                                              "outline", "scenarios"]
     assert len(re.findall(r"\bGUIDE_STEPS_GLOBE\s*=", CONFIG)) == 1 and len(re.findall(r"\bGUIDE_STEPS\s*=", CONFIG)) == 1
     by_id = {s["id"]: s for s in GLOBE_STEPS}
     assert by_id["globe"]["text"] == "This is Earth. Drag to spin it and scroll to zoom."
+    assert by_id["modes"]["text"] == "Switch between the Earth globe and a terrain map here."
     assert by_id["regions"]["text"] == "The cyan boxes are our demo regions. Click one to see its trend below."
     assert by_id["switch"]["text"] == "Turn the trend map on or off here."
     assert by_id["variables"]["text"] == "Pick a variable here. Temperature is the clearest one."
     assert "not statistically significant, which is not the same as no trend" in by_id["legend"]["text"]
     assert all(w in by_id["scenarios"]["text"] for w in ("solar", "wind", "hydro", "farming"))
     # the targets are the real elements: the globe, the region boxes, the switch, the list, the legend, the cards
-    assert [s["target"] for s in GLOBE_STEPS] == ["#globeBox", "#globeRegions", "#terrainHeight", "#trendSwitch", "#trendList",
+    assert [s["target"] for s in GLOBE_STEPS] == ["#globeBox", "#stageModes", "#globeRegions", "#terrainHeight", "#trendSwitch", "#trendList",
                                                   "#trendLegend", "#globeCell", "#globeOutline", "#demos"]
     assert by_id["regions"]["globeAction"] == "showRegions" and "state.showRegions = function ()" in GLOBE_JS
     # the new steps: the terrain slider, a cell, the US outline (the globe turns so that they are in sight)
@@ -95,6 +97,25 @@ def test_globe_tutorial_is_a_separate_list_with_its_steps_in_order():
     # every globe step has text and a target the globe builds (or the page has); a missing one is skipped
     assert all(s["text"].strip() and s["target"].strip() for s in GLOBE_STEPS)
     assert "if (STEPS[i].needsResult || targetOf(STEPS[i])) return i;" in GUIDE_JS
+
+
+def test_terrain_map_tutorial_is_its_own_list_with_its_own_first_visit_flag():
+    assert [s["id"] for s in MAP_STEPS] == ["contours", "chips", "height", "draped"]
+    assert len(re.findall(r"\bGUIDE_STEPS_MAP\s*=", CONFIG)) == 1
+    by_id = {s["id"]: s for s in MAP_STEPS}
+    assert by_id["contours"]["text"] == "Each line is a step in height, so you can see mountains and valleys."
+    assert [s["target"] for s in MAP_STEPS] == ["#globeBox", "#mapRegions", "#mapHeight", "#trendLegend"]
+    assert "draped over the terrain" in by_id["draped"]["text"]
+    assert all(s["text"].strip() and s["target"].strip() for s in MAP_STEPS)
+    # its own flag, started when the mode is shown; replay follows the mode; leaving the mode ends it
+    assert "var KEY_SEEN_MAP = 'estd.guide.mapTutorialSeen';" in GUIDE_JS
+    map_start = GUIDE_JS.split("function startMapTour() {")[1].split("}")[0]
+    assert "STEPS = MAP;" in map_start and "store.set(KEY_SEEN_MAP, '1')" in map_start and "stepFrom(0, 1)" in map_start
+    assert "if (mapActive()) return startMapTour();" in GUIDE_JS.split("function startTour() {")[1].split("}")[0]
+    assert "b.stage === 'map'" in GUIDE_JS.split("function mapActive() {")[1].split("}")[0]
+    assert "if (mapActive()) return store.get(KEY_SEEN_MAP) !== null ? undefined : startMapTour();" in GUIDE_JS
+    assert "if (tour >= 0 && STEPS === MAP && b.stage !== 'map') return closeBubble();" in GUIDE_JS
+    assert "'data-stage'] });" in GUIDE_JS and "flag('stage', 'map');" in GLOBE_JS and "flag('stage', 'earth');" in GLOBE_JS
 
 
 def test_step_texts_live_in_the_config_only():

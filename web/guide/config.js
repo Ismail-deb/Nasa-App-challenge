@@ -92,6 +92,11 @@ const GUIDE_STEPS_GLOBE = [
     "text": "This is Earth. Drag to spin it and scroll to zoom."
   },
   {
+    "id": "modes",
+    "target": "#stageModes",
+    "text": "Switch between the Earth globe and a terrain map here."
+  },
+  {
     "id": "regions",
     "target": "#globeRegions",
     "fallback": "#globeBox",
@@ -134,6 +139,33 @@ const GUIDE_STEPS_GLOBE = [
     "id": "scenarios",
     "target": "#demos",
     "text": "Click a scenario to load its chart and what it means for solar, wind, hydro or farming."
+  }
+];
+
+// The Terrain-map tutorial: a third list, shown the first time the "Terrain map" mode of Globe view is
+// opened (its own first-visit flag) and replayed by the replay button while that mode is active.
+// Same fields as the Globe-view list; a step whose target is not in the page is skipped quietly.
+const GUIDE_STEPS_MAP = [
+  {
+    "id": "contours",
+    "target": "#globeBox",
+    "text": "Each line is a step in height, so you can see mountains and valleys."
+  },
+  {
+    "id": "chips",
+    "target": "#mapRegions",
+    "text": "Jump to one of our demo regions, or to the whole US, with these buttons."
+  },
+  {
+    "id": "height",
+    "target": "#mapHeight",
+    "text": "Drag this to make the terrain taller or flatter."
+  },
+  {
+    "id": "draped",
+    "target": "#trendLegend",
+    "fallback": "#globeBox",
+    "text": "The trend colours are draped over the terrain: warm means an increase per decade, cool a decrease."
   }
 ];
 

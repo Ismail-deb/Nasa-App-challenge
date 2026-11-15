@@ -9,7 +9,8 @@
    it works without it; nothing is ever written to the console.
 
    Texts, the guide's name and the picture addresses come from config.js
-   (GUIDE_NAME, GUIDE_IMAGES, GUIDE_POSE_MANIFEST, GUIDE_STEPS, GUIDE_STEPS_GLOBE, GUIDE_TIPS, GUIDE_DANCE). */
+   (GUIDE_NAME, GUIDE_IMAGES, GUIDE_POSE_MANIFEST, GUIDE_STEPS, GUIDE_STEPS_GLOBE, GUIDE_STEPS_MAP, GUIDE_TIPS,
+   GUIDE_DANCE). */
 (function () {
   'use strict';
 
@@ -48,6 +49,7 @@
   var KEY_ON = 'estd.guide.enabled';          // "on" | "off" (missing = on)
   var KEY_SEEN = 'estd.guide.tutorialSeen';   // set once the tutorial has been started
   var KEY_SEEN_GLOBE = 'estd.guide.globeTutorialSeen';   // the same, for the Globe-view tutorial
+  var KEY_SEEN_MAP = 'estd.guide.mapTutorialSeen';       // the same, for the Terrain-map tutorial
   var KEY_POS = 'estd.guide.pos';             // where he stands: {"x": 0..1, "y": 0..1} across the free area
   var KEY_TUCK = 'estd.guide.tucked';         // "yes" | "no" (missing = tucked only in a narrow window)
   var KEY_DANCE = 'estd.guide.dance';         // "on" | "off" (missing = on): the occasional idle dance
@@ -94,6 +96,7 @@
     // two tutorials: STEPS is the one that is running (or ran last)
     var CLASSIC = GUIDE_STEPS;
     var GLOBE = typeof GUIDE_STEPS_GLOBE !== 'undefined' && Array.isArray(GUIDE_STEPS_GLOBE) ? GUIDE_STEPS_GLOBE : [];
+    var MAP = typeof GUIDE_STEPS_MAP !== 'undefined' && Array.isArray(GUIDE_STEPS_MAP) ? GUIDE_STEPS_MAP : [];
     var GREETING = typeof GUIDE_GREETING === 'string' ? GUIDE_GREETING : "Hi, I'm {name}.";
     var IMAGES = typeof GUIDE_IMAGES === 'object' && GUIDE_IMAGES ? GUIDE_IMAGES : null;
     var haveArt = !!IMAGES && POSES.every(function (p) { return typeof IMAGES[p] === 'string' && IMAGES[p]; });
@@ -466,6 +469,11 @@
       var b = document.body.dataset;
       return GLOBE.length > 0 && b.view === 'globe' && b.globe === 'ready';
     }
+    // the "Terrain map" mode of Globe view is shown (the globe writes data-stage on <body>)
+    function mapActive() {
+      var b = document.body.dataset;
+      return MAP.length > 0 && b.view === 'globe' && b.globe === 'ready' && b.stage === 'map';
+    }
     function targetOf(step) { return rectOf(step.target) || (step.fallback ? rectOf(step.fallback) : null); }
     // the first step from i on (dir 1) or back (dir -1) whose element is in the page; -1 when there is none.
     // A step that will show a result first is taken as it is.
@@ -511,7 +519,8 @@
     }
 
     function startTour() {
-      if (globeActive()) return startGlobeTour();      // the tutorial of the view that is shown
+      if (mapActive()) return startMapTour();          // the tutorial of the view (and mode) that is shown
+      if (globeActive()) return startGlobeTour();
       STEPS = CLASSIC;
       store.set(KEY_SEEN, '1');                        // first visit only: never starts by itself again
       return showStep(0);
@@ -524,13 +533,23 @@
       return first < 0 ? undefined : showStep(first);
     }
 
+    function startMapTour() {
+      STEPS = MAP;
+      store.set(KEY_SEEN_MAP, '1');                    // its own first-visit flag
+      var first = stepFrom(0, 1);
+      return first < 0 ? undefined : showStep(first);
+    }
+
     // Globe view opened for the first time (and the globe and its trend maps have settled): its tutorial.
     // Leaving Globe view while that tutorial runs ends it.
     function maybeGlobeTour() {
       var b = document.body.dataset;
-      if (tour >= 0 && STEPS === GLOBE && b.view !== 'globe') return closeBubble();
+      if (tour >= 0 && (STEPS === GLOBE || STEPS === MAP) && b.view !== 'globe') return closeBubble();
+      if (tour >= 0 && STEPS === MAP && b.stage !== 'map') return closeBubble();     // back to Earth: it ends
       if (!enabled || tour >= 0 || !bubble.hidden || !globeActive()) return undefined;
       if (b.trend !== 'ready' && b.trend !== 'failed') return undefined;
+      // Terrain map opened for the first time: its own list (the Globe tour then waits for Earth)
+      if (mapActive()) return store.get(KEY_SEEN_MAP) !== null ? undefined : startMapTour();
       if (store.get(KEY_SEEN_GLOBE) !== null) return undefined;
       return startGlobeTour();
     }
@@ -783,7 +802,7 @@
       });
       // the view switch and the globe's progress, written on <body> by the page
       var views = new MutationObserver(safe(maybeGlobeTour));
-      views.observe(document.body, { attributes: true, attributeFilter: ['data-view', 'data-globe', 'data-trend'] });
+      views.observe(document.body, { attributes: true, attributeFilter: ['data-view', 'data-globe', 'data-trend', 'data-stage'] });
       cleanups.push(function () { watcher.disconnect(); views.disconnect(); });
     }
 
