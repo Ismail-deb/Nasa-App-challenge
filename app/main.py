@@ -13,6 +13,8 @@ from app import data, display, lenses, presets
 
 WEB = Path(__file__).resolve().parent.parent / "web"
 app = FastAPI(title="Earth System Trend Detective")
+# the browser must re-validate the page and its scripts, so an old copy is never run after an update
+NO_CACHE = {"Cache-Control": "no-cache"}
 
 
 def _clean(text: str | None) -> str | None:
@@ -119,6 +121,11 @@ def _series(variable, bbox, start, end):
         ready = _preset_regions_with_series(entry)
         hint = (f"{entry['name']} is ready for: {', '.join(ready)}." if ready
                 else f"{entry['name']} is not ready for any preset yet.")
+        if region is None:      # not a preset: only the multi-GB gridded files can answer this
+            raise HTTPException(404, "This is a custom region (it does not match a demo region). "
+                                     "Custom regions need the full dataset and are only available on the "
+                                     "machine that has it; this copy has the demo regions only. "
+                                     f"Use a Demo button to see one. {hint}")
         raise HTTPException(404, f"Region/variable not available yet, try a preset. {hint}")
     except ValueError as ex:
         raise HTTPException(400, str(ex))
@@ -197,7 +204,16 @@ def favicon():
 
 @app.get("/")
 def index():
-    return FileResponse(WEB / "index.html")
+    return FileResponse(WEB / "index.html", headers=NO_CACHE)
 
 
-app.mount("/static", StaticFiles(directory=WEB), name="static")
+class _FreshStatic(StaticFiles):
+    """Static files that the browser re-checks on every load (never a stale page script)."""
+
+    async def get_response(self, path, scope):
+        response = await super().get_response(path, scope)
+        response.headers.update(NO_CACHE)
+        return response
+
+
+app.mount("/static", _FreshStatic(directory=WEB), name="static")

@@ -94,12 +94,18 @@ def test_non_preset_bbox_falls_back_to_gridded(env):
 def test_missing_data_error_is_friendly(env):
     client, _, series = env
     write_series(series, "boxa")                                        # ready only for boxa
-    for bbox in [(-1, -1, 1, 1), (10, 10, 12, 12)]:                     # non-preset; preset w/o series
-        r = trend(client, bbox)
-        assert r.status_code == 404
-        msg = r.json()["detail"]
-        assert msg.startswith("Region/variable not available yet, try a preset.")
-        assert "ready for: boxa" in msg
+    r = trend(client, (10, 10, 12, 12))                                 # a preset without a series
+    assert r.status_code == 404
+    msg = r.json()["detail"]
+    assert msg.startswith("Region/variable not available yet, try a preset.")
+    assert "ready for: boxa" in msg
+    r = trend(client, (-1, -1, 1, 1))                                   # not a preset: a custom region
+    assert r.status_code == 404
+    msg = r.json()["detail"]
+    assert msg.startswith("This is a custom region")
+    assert "Custom regions need the full dataset" in msg
+    assert "only available on the machine that has it" in msg
+    assert "ready for: boxa" in msg                                     # still says what does work
     r = client.get("/trend", params={"variable": "M2TMNXRAD/SWGDN", "bbox": "-1,-1,1,1"})
     assert r.status_code == 404 and "not ready for any preset yet" in r.json()["detail"]
     assert client.get("/timeseries", params={"variable": T2M, "bbox": "-1,-1,1,1"}).status_code == 404

@@ -220,7 +220,8 @@ def test_page_normalises_comma_decimals_and_fills_fields_with_dots():
     html = _page()
     assert ".replace(',', '.')" in html and "function parseCoord" in html
     assert "parseCoord" in html.split("async function run()")[1]          # used when building the request
-    assert "p.bbox.map(fmtCoord)" in html and "function fmtCoord(x) { return String(x); }" in html
+    assert "function fmtCoord(x) { return String(x).trim().replace(',', '.'); }" in html   # written with dots
+    assert "toLocaleString" not in html and "Intl.NumberFormat" not in html   # nothing locale-dependent
     assert "The region needs four numbers" in html                        # a bad value gets a message
 
 
@@ -282,7 +283,16 @@ def test_demo_selects_region_lens_and_variable_together():
     demo = _page().split("async function demo")[1].split("async function run")[0]
     assert "$('lens').value = p.lens" in demo and "await loadVars(want)" in demo
     assert demo.index("$('lens').value = p.lens") < demo.index("await loadVars(want)") < demo.index("await run()")
-    assert "p.bbox.map(fmtCoord)" in demo
+    assert "setBounds(p.bbox)" in demo and demo.index("setBounds(p.bbox)") < demo.index("await loadVars(want)")
+
+
+def test_presets_write_all_four_bounds_field_by_field():
+    html = _page()
+    assert "const BOUNDS = ['w', 's', 'e', 'n'];" in html               # bbox order: west, south, east, north
+    body = html.split("function setBounds(bbox) {")[1].split("\n}")[0]
+    assert "BOUNDS.forEach((id, i) => { $(id).value = fmtCoord(bbox[i]); });" in body
+    assert "BOUNDS.every(" in body                                      # ... and reads them back
+    assert "BOUNDS.map(id => parseCoord($(id).value))" in html.split("async function run()")[1]
 
 
 def test_lens_load_failure_message_is_persistent_and_next_to_the_control():

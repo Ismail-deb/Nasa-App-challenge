@@ -94,6 +94,7 @@ All tests are offline (no NASA access needed).
 | `address already in use` / port 8000 busy | Another copy is running. Stop it, or use another port: `uvicorn app.main:app --port 8001` and open http://127.0.0.1:8001. |
 | Buttons do nothing / no chart | Check the internet connection (the chart library loads from the web), then reload with Ctrl+F5. |
 | "Region/variable not available yet, try a preset" | That variable has no data for that region yet; use a Demo button or another variable. |
+| "This is a custom region ... Custom regions need the full dataset" | The four numbers do not match a demo region, and this copy has no gridded files (they are multi-GB and stay on the machine that downloaded them). Use a Demo button. |
 | `ImportError: DLL load failed ... _netCDF4` (Windows) | Harmless for this app: it reads files with `h5netcdf`, which is in `requirements.txt`. |
 
 ## Downloading NASA data (only for developers adding data)

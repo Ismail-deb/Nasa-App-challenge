@@ -106,13 +106,29 @@ function loadFailed(what, e) {
 }
 
 // Bounding-box fields accept "31.3" and "31,3" (comma-decimal locales, e.g. South Africa).
+// Commas become dots in both directions: when a field is read (parseCoord) and when it is
+// written (fmtCoord). Nothing here uses locale-dependent number formatting.
 // Returns NaN for anything that is not a number.
 function parseCoord(s) {
   const t = String(s).trim().replace(',', '.');
   return /^[-+]?(\d+\.?\d*|\.\d+)$/.test(t) ? parseFloat(t) : NaN;
 }
-// what the fields are filled with: always a plain dot-decimal number, which parseCoord reads back
-function fmtCoord(x) { return String(x); }
+// what the fields are filled with: always plain dot-decimal text, which parseCoord reads back
+function fmtCoord(x) { return String(x).trim().replace(',', '.'); }
+
+// the four region fields, in bbox order (west, south, east, north)
+const BOUNDS = ['w', 's', 'e', 'n'];
+// Writes all four bounds, one field at a time, then reads them back.
+// Returns false if any field does not hold the value it was given.
+function setBounds(bbox) {
+  BOUNDS.forEach((id, i) => { $(id).value = fmtCoord(bbox[i]); });
+  return BOUNDS.every((id, i) => parseCoord($(id).value) === parseCoord(bbox[i]));
+}
+// a typed "31,3" is shown back as "31.3" once the field is left
+BOUNDS.forEach(id => $(id).addEventListener('change', () => {
+  const x = parseCoord($(id).value);
+  if (!Number.isNaN(x)) $(id).value = fmtCoord(x);
+}));
 
 async function loadVars(keep) {
   const lens = $('lens').value;
@@ -161,7 +177,11 @@ async function init() {
 // a demo button selects its region, its lens and the lens's default variable
 // (or, if that has no data for this region yet, the first lens variable that does)
 async function demo(p) {
-  [$('w').value, $('s').value, $('e').value, $('n').value] = p.bbox.map(fmtCoord);
+  $('err').textContent = '';
+  if (!setBounds(p.bbox)) {
+    $('err').textContent = `Could not set the region for ${p.name}; reload the page (Ctrl+F5) and try again.`;
+    return;
+  }
   const l = lensList.find(x => x.id === p.lens);
   let want;
   if (l) {
@@ -183,7 +203,7 @@ async function run() {
     return;
   }
   if (!$('variable').value) { $('err').textContent = LOAD_FAIL; return; }
-  const box = [$('w').value, $('s').value, $('e').value, $('n').value].map(parseCoord);
+  const box = BOUNDS.map(id => parseCoord($(id).value));
   if (box.some(Number.isNaN)) {
     $('err').textContent = 'The region needs four numbers (West, South, East, North in degrees), e.g. 31.3 or 31,3.';
     return;

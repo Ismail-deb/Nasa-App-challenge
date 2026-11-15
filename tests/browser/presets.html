@@ -1,0 +1,65 @@
+<!doctype html><meta charset="utf-8"><title>harness: presets</title>
+<iframe id="f" src="/" width="1100" height="900"></iframe>
+<script>
+// Clicks every demo button in all 24 orders, after filling the four region fields with
+// comma-decimal text, and reports what the fields hold afterwards. See tests/test_page_browser.py.
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const out = {errors: [], clicks: []};
+const report = () => fetch('/__harness/result/presets', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(out)});
+const IDS = ['w', 's', 'e', 'n'];
+function permutations(a) {
+  return a.length < 2 ? [a] : a.flatMap((x, i) => permutations([...a.slice(0, i), ...a.slice(i + 1)]).map(p => [x, ...p]));
+}
+(async () => {
+  try {
+    // the guide is not under test here: switch it off before the page loads
+    try { localStorage.setItem('estd.guide.enabled', 'off'); localStorage.setItem('estd.guide.tutorialSeen', '1'); } catch (e) {}
+    const f = document.getElementById('f');
+    if (!f.contentDocument || f.contentDocument.readyState !== 'complete' || f.contentWindow.location.href === 'about:blank')
+      await new Promise(r => f.addEventListener('load', r, {once: true}));
+    const d = f.contentDocument, w = f.contentWindow, $ = id => d.getElementById(id);
+    w.addEventListener('error', e => out.errors.push(String(e.message)));
+    w.addEventListener('unhandledrejection', e => out.errors.push('rejection: ' + e.reason));
+    const err0 = w.console.error; w.console.error = (...a) => { out.errors.push(a.join(' ')); err0.apply(w.console, a); };
+    for (let i = 0; i < 100 && !d.querySelectorAll('#demos button').length; i++) await sleep(100);
+    const btns = [...d.querySelectorAll('#demos button')];
+    out.n_buttons = btns.length;
+    const fields = () => IDS.map(id => $(id).value);
+    const type = values => values.forEach((v, i) => { $(IDS[i]).value = v; });
+    const clear = () => { $('cardTitle').textContent = ''; $('err').textContent = ''; };
+    // wait until the click has been answered: a result card for this click, or an error line
+    const settled = async () => {
+      for (let i = 0; i < 200; i++) {
+        await sleep(25);
+        if ($('err').textContent || $('cardTitle').textContent) return;
+      }
+    };
+    for (const order of permutations(btns)) {
+      for (const b of order) {
+        type(['12,5', '31,3', '-7,25', '44,0']);
+        const before = fields();
+        clear();
+        b.click();
+        await settled();
+        out.clicks.push({id: b.dataset.id, before, fields: fields(), lens: $('lens').value,
+                         variable: $('variable').value, err: $('err').textContent, card: $('cardTitle').textContent});
+      }
+    }
+    // the farming preset, then its box typed by hand with comma decimals, then "Show trend"
+    btns.find(b => b.dataset.id === 'central_valley').click(); await settled();
+    type(['-122,6', '35,0', '-118,8', '40,6']);
+    clear();
+    $('go').click(); await settled();
+    out.typed = {err: $('err').textContent, card: $('cardTitle').textContent};
+    type(['-122,6', '35,0', '-118,8', '40,6']);
+    IDS.forEach(id => $(id).dispatchEvent(new w.Event('change')));
+    out.typed.fields_after_change = fields();
+    // a region that is not a preset
+    type(['-100', '31,3', '-90', '40']);
+    clear();
+    $('go').click(); await settled();
+    out.custom = {err: $('err').textContent};
+  } catch (e) { out.errors.push('harness: ' + (e && e.stack || e)); }
+  await report();
+})();
+</script>
