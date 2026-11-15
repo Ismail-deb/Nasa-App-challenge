@@ -34,6 +34,8 @@
 </style>
 <!-- optional guide (web/guide/): the page works the same if these files fail to load -->
 <link rel="stylesheet" href="/static/guide/guide.css">
+<!-- optional 3D globe view (web/globe/): Classic view is unchanged if these files fail to load -->
+<link rel="stylesheet" href="/static/globe/globe.css">
 </head>
 <body>
 <header>
@@ -258,5 +260,7 @@ init().catch(e => loadFailed('Something went wrong while loading the page', e));
 <!-- optional guide: name, tutorial steps and tips in config.js; behaviour in guide.js -->
 <script src="/static/guide/config.js"></script>
 <script src="/static/guide/guide.js"></script>
+<!-- optional globe view: header switch + globe panel; Cesium loads only when Globe is chosen -->
+<script src="/static/globe/globe.js"></script>
 </body>
 </html>

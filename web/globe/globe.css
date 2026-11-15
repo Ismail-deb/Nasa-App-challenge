@@ -1,0 +1,32 @@
+/* Optional 3D globe view (web/globe/globe.js): header switch and the dark "hologram" panel. */
+
+#viewToggle { float: right; display: flex; gap: 0; margin: 0 0 6px 12px; }
+#viewToggle button {
+  background: rgba(255, 255, 255, .10); color: #fff; border: 1px solid rgba(255, 255, 255, .7);
+  padding: 5px 10px; font-size: .85rem; border-radius: 0;
+}
+#viewToggle button:first-child { border-radius: 6px 0 0 6px; }
+#viewToggle button:last-child { border-radius: 0 6px 6px 0; border-left: 0; }
+#viewToggle button[aria-pressed="true"] { background: #fff; color: #0b3d91; font-weight: 600; }
+#viewToggle button:focus-visible { outline: 3px solid #ffb703; outline-offset: 2px; }
+#viewNote { margin: 6px 0 0; font-size: .8rem; color: #ffe08a; }
+#viewNote[hidden], #globePanel[hidden], #globeTip[hidden], #globeNote[hidden], #globeStatus[hidden] { display: none !important; }
+
+.globe-panel { background: #02060f; border-color: #12324f; color: #cfefff; padding: 0; overflow: hidden; }
+.globe-stage { position: relative; height: min(62vh, 560px); min-height: 320px; }
+#globeBox { position: absolute; inset: 0; }
+#globeStatus {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  margin: 0; font-size: .95rem; color: #7fdcff; letter-spacing: .04em;
+}
+#globeTip {
+  position: absolute; z-index: 5; pointer-events: none; max-width: 280px;
+  background: rgba(2, 14, 30, .92); border: 1px solid #4fd8ff; border-radius: 6px;
+  box-shadow: 0 0 12px rgba(79, 216, 255, .35); padding: 6px 10px; font-size: .82rem; color: #e6f8ff;
+}
+#globeTip strong { display: block; margin-bottom: 2px; }
+#globeTip span { color: #9fe6ff; }
+.globe-foot { margin: 0; padding: 8px 14px; font-size: .82rem; color: #9fc9e0; border-top: 1px solid #12324f; }
+#globeNote { margin-left: 8px; padding: 1px 8px; border-radius: 10px; background: #3a2a00; color: #ffe08a; }
+/* Cesium's own credit bar: dim, readable on the dark globe */
+.globe-panel .cesium-widget-credits { opacity: .7; }

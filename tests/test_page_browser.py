@@ -68,6 +68,11 @@ def site():
             js = ("Object.defineProperty(window, 'localStorage', {get() { throw new Error('blocked'); }});\n" + js)
         return Response(js, media_type="text/javascript", headers=main.NO_CACHE)
 
+    @outer.get("/frontend/config.local.js")
+    def no_token():
+        """Never the real token in tests: the globe always sees an empty one (offline mode)."""
+        return Response(main.NO_TOKEN_JS, media_type="text/javascript", headers=main.NO_CACHE)
+
     @outer.get("/__harness/{name}.html")
     def page(name: str):
         return FileResponse(HARNESS / f"{name}.html", headers=main.NO_CACHE)
@@ -251,3 +256,34 @@ def test_reduced_motion_means_no_animation_and_instant_text(site, tmp_path):
     assert r["typed"] == r["spoken"] == _said(steps[0]["text"], name) and r["state"] != "talking"
     assert r["animation"] == "none" and r["beacon"] == "none"
     assert r["step2"]["typed"] == _said(steps[1]["text"], name) and r["step2"]["state"] != "talking"
+
+
+# ---------------------------------------------------------------- the optional globe view
+
+def test_globe_without_a_token_runs_offline_and_its_regions_run_the_demo_buttons(site, tmp_path):
+    """Classic view is the default and does not load Cesium. With no token the globe is in offline
+    mode with its note; without WebGL it falls back to Classic view with a note. Either way nothing
+    reaches the console, and each region box runs exactly its preset's Demo button."""
+    out = site("globe", tmp_path / "profile", extra=("--enable-unsafe-swiftshader", "--use-angle=swiftshader"))
+    assert out["errors"] == [], out["errors"]
+    assert out["initial"] == {"toggle": [["Globe", "false"], ["Classic view", "true"]], "panelShown": False,
+                              "cesiumLoaded": False, "view": "classic"}
+    g = out["globe"]
+    assert g["mode"] == "offline", g                                   # no token -> offline, always
+    if g["status"] == "failed":                                         # no WebGL on this machine
+        assert g["view"] == "classic" and not g["panelShown"] and g["viewNote"], g
+    else:
+        assert g["status"] == "ready" and g["view"] == "globe" and g["panelShown"] and g["canvas"], g
+        assert g["globeNote"] == "Globe running in offline mode, no terrain"
+        wanted = presets.load_presets()
+        assert g["regions"] == list(wanted)
+        assert len(out["selects"]) == len(wanted)
+        for s in out["selects"]:
+            p = wanted[s["id"]]
+            assert s["ok"] and [float(x) for x in s["fields"]] == [float(x) for x in p["bbox"]], s
+            assert s["lens"] == p["lens"] and s["variable"] in lenses.variables(p["lens"]), s
+            assert s["err"] in ("", NO_CHART) and s["card"], s
+        assert out["unknown"] is False                                  # only presets are clickable
+    c = out["classic"]
+    assert c["toggle"] == [["Globe", "false"], ["Classic view", "true"]] and not c["panelShown"]
+    assert c["card"] and c["err"] in ("", NO_CHART)                     # Classic view still works

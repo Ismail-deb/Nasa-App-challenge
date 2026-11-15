@@ -1,0 +1,2 @@
+# vendored CesiumJS: store byte-for-byte, no line-ending conversion
+frontend/vendor/** -text

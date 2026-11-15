@@ -1,0 +1,1 @@
+CesiumJS 1.147, copied from Build/Cesium of https://github.com/CesiumGS/cesium/releases/download/1.147/Cesium-1.147.zip (Cesium.js, Assets, ThirdParty, Workers, Widgets only). Apache-2.0, see LICENSE.md.

@@ -15,3 +15,5 @@ env/
 pull.log
 check.log
 logs/
+# Cesium ion token for the globe view: local only, never committed (copy config.local.example.js)
+frontend/config.local.js

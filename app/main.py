@@ -217,3 +217,23 @@ class _FreshStatic(StaticFiles):
 
 
 app.mount("/static", _FreshStatic(directory=WEB), name="static")
+
+
+# ---------------------------------------------------------------- optional 3D globe (web/globe/)
+FRONTEND = Path(__file__).resolve().parent.parent / "frontend"
+LOCAL_CONFIG = FRONTEND / "config.local.js"     # git-ignored; holds the Cesium ion token, if any
+# served when there is no config.local.js: no token, so the globe runs in offline mode
+NO_TOKEN_JS = 'window.CESIUM_ION_TOKEN = window.CESIUM_ION_TOKEN || "";\n'
+
+
+@app.get("/frontend/config.local.js", include_in_schema=False)
+def local_config():
+    """The local token file, or an empty-token stand-in: never a 404 (no console noise)."""
+    path = LOCAL_CONFIG
+    js = path.read_text(encoding="utf-8") if path.is_file() else NO_TOKEN_JS
+    return Response(js, media_type="text/javascript", headers=NO_CACHE)
+
+
+# vendored CesiumJS (frontend/vendor/cesium); missing directory -> 404s, and the globe falls back to Classic
+app.mount("/vendor/cesium", StaticFiles(directory=FRONTEND / "vendor" / "cesium", check_dir=False),
+          name="cesium")

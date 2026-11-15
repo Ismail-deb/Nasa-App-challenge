@@ -1,0 +1,59 @@
+<!doctype html><meta charset="utf-8"><title>harness: globe</title>
+<iframe id="f" src="/" width="1200" height="900"></iframe>
+<script>
+// The optional globe view, without a token (the harness serves an empty one): Classic view is the
+// default, Globe starts in offline mode (or, without WebGL, falls back to Classic with a note),
+// and each region runs its preset's Demo button. See tests/test_page_browser.py.
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const out = {errors: [], selects: []};
+const report = () => fetch('/__harness/result/globe', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(out)});
+const visible = el => !!el && !el.hidden && el.getClientRects().length > 0;
+(async () => {
+  try {
+    try { localStorage.setItem('estd.guide.enabled', 'off'); localStorage.setItem('estd.guide.tutorialSeen', '1'); } catch (e) {}
+    const f = document.getElementById('f');
+    if (!f.contentDocument || f.contentDocument.readyState !== 'complete' || f.contentWindow.location.href === 'about:blank')
+      await new Promise(r => f.addEventListener('load', r, {once: true}));
+    const d = f.contentDocument, w = f.contentWindow, $ = id => d.getElementById(id);
+    w.addEventListener('error', e => out.errors.push(String(e.message)));
+    w.addEventListener('unhandledrejection', e => out.errors.push('rejection: ' + e.reason));
+    for (const k of ['error', 'warn']) {
+      const orig = w.console[k];
+      w.console[k] = (...a) => { out.errors.push(`console.${k}: ${a.join(' ')}`); orig.apply(w.console, a); };
+    }
+    for (let i = 0; i < 100 && !(d.querySelectorAll('#demos button').length && $('viewToggle')); i++) await sleep(100);
+    const pressed = () => [...d.querySelectorAll('#viewToggle button')].map(b => [b.textContent, b.getAttribute('aria-pressed')]);
+    out.initial = {toggle: pressed(), panelShown: visible($('globePanel')), cesiumLoaded: !!w.Cesium,
+                   view: w.EstdGlobe && w.EstdGlobe.view};
+
+    d.querySelector('#viewToggle [data-view="globe"]').click();
+    out.afterGlobeClick = {panelShown: visible($('globePanel')), toggle: pressed()};
+    for (let i = 0; i < 600 && !['ready', 'failed'].includes(w.EstdGlobe.status); i++) await sleep(100);
+    const G = w.EstdGlobe;
+    out.globe = {status: G.status, mode: G.mode, note: G.note, view: G.view, regions: G.regions.slice(),
+                 globeNote: visible($('globeNote')) ? $('globeNote').textContent : null,
+                 viewNote: visible($('viewNote')) ? $('viewNote').textContent : null,
+                 panelShown: visible($('globePanel')), canvas: !!d.querySelector('#globeBox canvas')};
+
+    if (G.status === 'ready') {
+      for (const id of G.regions) {
+        $('cardTitle').textContent = ''; $('err').textContent = '';
+        const ok = G.selectPreset(id);
+        for (let i = 0; i < 200 && !$('err').textContent && !$('cardTitle').textContent; i++) await sleep(25);
+        out.selects.push({id, ok, fields: ['w', 's', 'e', 'n'].map(x => $(x).value), lens: $('lens').value,
+                          variable: $('variable').value, err: $('err').textContent, card: $('cardTitle').textContent});
+      }
+      out.unknown = G.selectPreset('not-a-preset');
+    }
+
+    d.querySelector('#viewToggle [data-view="classic"]').click();
+    out.classic = {panelShown: visible($('globePanel')), toggle: pressed()};
+    $('cardTitle').textContent = ''; $('err').textContent = '';
+    d.querySelectorAll('#demos button')[0].click();
+    for (let i = 0; i < 200 && !$('err').textContent && !$('cardTitle').textContent; i++) await sleep(25);
+    out.classic.card = $('cardTitle').textContent;
+    out.classic.err = $('err').textContent;
+  } catch (e) { out.errors.push('harness: ' + (e && e.stack || e)); }
+  await report();
+})();
+</script>
