@@ -1,6 +1,14 @@
 # Variable catalog. Run `python check_catalog.py` and correct fields from its output.
 # status: planned  -> not pullable yet (derived or other archive); hidden from the app.
 # variable: a name, or a list of names when `derive` combines them (e.g. wind speed).
+# sources: the data-source label shown to users for each NASA collection (short_name)
+sources:
+  M2TMNXSLV: NASA MERRA-2
+  M2TMNXRAD: NASA MERRA-2
+  M2TMNXAER: NASA MERRA-2
+  GPM_3IMERGM: NASA GPM IMERG
+  GPM_3IMERGDF: NASA GPM IMERG
+  GLDAS_NOAH025_M: NASA GLDAS
 categories:
   atmosphere_solar:
     label: Atmosphere & solar

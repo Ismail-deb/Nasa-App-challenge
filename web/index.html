@@ -17,7 +17,15 @@
     --ink: #3A2218; --ink-2: #6B4A3A;
     --teal: #1F8A9A; --teal-strong: #176E7B;          /* strong: text and filled controls (contrast 4.5:1+) */
     --orange: #E0652F; --orange-ink: #A23900; --blue: #3B6FB6;
-    --stage: #0B2530; --cyan: #3CE0D0;
+    --stage: #0B2530; --stage-2: #123C4A; --cyan: #3CE0D0;
+    /* header hero: cream ink on the deep teal-navy stage colour (contrast > 12:1) */
+    --hero-ink: #FBF3E4; --hero-ink-2: rgba(251, 243, 228, .86); --hero-note: #FFB599;
+    --glass: rgba(251, 243, 228, .08); --glass-hover: rgba(251, 243, 228, .16); --glass-border: rgba(251, 243, 228, .38);
+    /* scenario-card accents by lens: top edge, soft tint, stronger tint when selected */
+    --lens-solar: #E0652F; --lens-solar-tint: rgba(224, 101, 47, .07); --lens-solar-strong: rgba(224, 101, 47, .16);
+    --lens-wind: #3B6FB6; --lens-wind-tint: rgba(59, 111, 182, .07); --lens-wind-strong: rgba(59, 111, 182, .16);
+    --lens-hydro: #1F8A9A; --lens-hydro-tint: rgba(31, 138, 154, .07); --lens-hydro-strong: rgba(31, 138, 154, .16);
+    --lens-farming: #5E8C31; --lens-farming-tint: rgba(94, 140, 49, .08); --lens-farming-strong: rgba(94, 140, 49, .18);
     --radius: 16px; --radius-sm: 12px;
     --shadow-1: 0 4px 16px -2px rgba(107, 74, 58, .08), 0 2px 6px -1px rgba(107, 74, 58, .04);
     --shadow-2: 0 12px 32px -4px rgba(58, 34, 24, .12), 0 4px 12px -2px rgba(58, 34, 24, .06);
@@ -31,15 +39,35 @@
   svg.icon { width: 1.25em; height: 1.25em; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
   :focus-visible { outline: 3px solid var(--teal-strong); outline-offset: 2px; }
 
-  /* ---- header ---- */
-  header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px;
-           padding: 16px 40px; border-bottom: 1px solid var(--border); background: var(--bg); }
+  /* ---- header: a deep teal-navy hero band ---- */
+  header { position: relative; isolation: isolate; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+           gap: 12px 24px; padding: 20px 40px 23px; color: var(--hero-ink);
+           background: linear-gradient(120deg, var(--stage) 0%, var(--stage) 35%, var(--stage-2) 100%); }
+  /* faint topographic contours (original drawing), cyan at about 8% */
+  header::before { content: ""; position: absolute; inset: 0; z-index: -1; opacity: .08; pointer-events: none;
+    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='320' height='180' viewBox='0 0 320 180'%3E%3Cg fill='none' stroke='%233CE0D0' stroke-width='1.2'%3E%3Cpath d='M70 92c8-30 46-38 66-20s14 44-14 52-60-4-52-32z'/%3E%3Cpath d='M44 94c6-50 76-66 110-36s26 74-22 86-96-8-88-50z'/%3E%3Cpath d='M18 98c2-70 104-96 158-54s40 104-34 122S16 150 18 98z'/%3E%3Cpath d='M-8 102C-8 14 128-22 200 32s56 136-50 156'/%3E%3Cpath d='M236 40c18-14 46-6 50 14s-18 34-38 28-26-28-12-42z'/%3E%3Cpath d='M220 34c26-26 80-14 86 20s-28 60-62 50-50-44-24-70z'/%3E%3Cpath d='M204 30c34-40 116-22 124 26s-40 86-88 74-72-60-36-100z'/%3E%3Cpath d='M250 150c20-6 44 2 70 18M226 176c34-14 66-6 98 4'/%3E%3C/g%3E%3C/svg%3E") repeat; }
+  /* thin orange-to-teal line along the bottom edge */
+  header::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 3px; pointer-events: none;
+                  background: linear-gradient(90deg, var(--orange), var(--teal)); }
   .brand { display: flex; align-items: center; gap: 14px; min-width: 0; }
+  .brand > div { min-width: 0; }
   .brand-mark { width: 44px; height: 44px; border-radius: var(--radius-sm); background: var(--teal-strong); color: #fff;
                 display: flex; align-items: center; justify-content: center; flex: none; font-size: 22px; }
-  header h1 { font-size: 1.375rem; font-weight: 800; letter-spacing: -.01em; line-height: 1.2; }
-  header p { font-size: .875rem; color: var(--ink-2); line-height: 1.35; margin-top: 2px; }
-  .header-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+  header .brand-mark { border: 1px solid var(--glass-border); }
+  header h1 { font-size: 1.375rem; font-weight: 800; letter-spacing: -.01em; line-height: 1.2; color: var(--hero-ink); overflow-wrap: anywhere; }
+  header p { font-size: .875rem; color: var(--hero-ink-2); line-height: 1.35; margin-top: 2px; }
+  .header-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; min-width: 0; max-width: 100%; }
+  /* the view switch and the guide buttons (added by globe.js and guide.js) as translucent glass pills */
+  header #viewToggle { background: rgba(251, 243, 228, .06); border: 1px solid var(--glass-border); }
+  header #viewToggle button, header #guideControls button {
+    background: var(--glass); color: var(--hero-ink); border: 1px solid var(--glass-border); box-shadow: none; }
+  header #viewToggle button { border-color: transparent; background: transparent; }
+  header #viewToggle button:hover, header #guideControls button:hover { background: var(--glass-hover); color: var(--hero-ink); }
+  header #viewToggle button[aria-pressed="true"] { background: var(--hero-ink); color: var(--stage); border-color: var(--hero-ink); }
+  header #viewToggle button:focus-visible, header #guideControls button:focus-visible, header :focus-visible {
+    outline: 3px solid var(--cyan); outline-offset: 2px; }
+  header #viewNote { color: var(--hero-note); }
+  header button:disabled { opacity: .72; }      /* still readable on the dark band */
 
   /* ---- layout ---- */
   main { max-width: 1440px; margin: 0 auto; padding: 32px 40px 48px; display: grid; gap: 32px; }
@@ -80,17 +108,27 @@
   /* scenario cards (built from /presets) */
   #demos { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; margin-top: 16px; }
   #demos button {
-    display: grid; gap: 4px; justify-items: start; text-align: left; padding: 16px; min-height: 132px;
-    background: var(--panel); color: var(--ink); border: 1px solid var(--border); border-radius: var(--radius-sm);
+    --accent: var(--lens-hydro); --tint: var(--lens-hydro-tint); --tint-strong: var(--lens-hydro-strong);
+    /* rows: icon + lens, title, description (takes the spare height), source: every title starts at the same height */
+    display: grid; grid-template-rows: auto auto 1fr auto; align-content: start; gap: 4px; justify-items: start;
+    text-align: left; padding: 14px 16px 16px; min-height: 132px; color: var(--ink);
+    background: linear-gradient(var(--tint), var(--tint)), var(--panel);
+    border: 1px solid var(--border); border-top: 4px solid var(--accent); border-radius: var(--radius-sm);
     transition: background-color .15s, box-shadow .15s;
   }
-  #demos button:hover { background: var(--cream); }
-  #demos button[aria-pressed="true"] { background: var(--cream); box-shadow: 0 0 0 2px var(--teal-strong); border-color: transparent; }
+  #demos button[data-lens="solar"] { --accent: var(--lens-solar); --tint: var(--lens-solar-tint); --tint-strong: var(--lens-solar-strong); }
+  #demos button[data-lens="wind"] { --accent: var(--lens-wind); --tint: var(--lens-wind-tint); --tint-strong: var(--lens-wind-strong); }
+  #demos button[data-lens="hydro"] { --accent: var(--lens-hydro); --tint: var(--lens-hydro-tint); --tint-strong: var(--lens-hydro-strong); }
+  #demos button[data-lens="farming"] { --accent: var(--lens-farming); --tint: var(--lens-farming-tint); --tint-strong: var(--lens-farming-strong); }
+  #demos button:hover { background: linear-gradient(var(--tint-strong), var(--tint-strong)), var(--panel); }
+  #demos button[aria-pressed="true"] { background: linear-gradient(var(--tint-strong), var(--tint-strong)), var(--panel);
+                                       box-shadow: 0 0 0 2px var(--teal-strong); border-color: transparent; border-top-color: var(--accent); }
   #demos .sc-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; margin-bottom: 4px; }
   #demos .sc-icon { width: 36px; height: 36px; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #fff; background: var(--teal-strong); font-size: 18px; }
   #demos button[data-lens="solar"] .sc-icon { background: var(--orange-ink); }
   #demos button[data-lens="wind"] .sc-icon { background: var(--blue); }
   #demos button[data-lens="farming"] .sc-icon { background: #4D6B2F; }
+  #demos .sc-top { grid-row: 1; } #demos .sc-name { grid-row: 2; } #demos .sc-sub { grid-row: 3; align-self: start; } #demos .sc-src { grid-row: 4; }
   #demos .sc-lens { font-size: .875rem; font-weight: 700; color: var(--ink-2); }
   #demos button[aria-pressed="true"] .sc-lens { background: var(--teal-strong); color: #fff; padding: 1px 10px; border-radius: 999px; }
   #demos .sc-name { font-size: 1rem; font-weight: 800; line-height: 1.25; }
@@ -165,6 +203,16 @@
   #chartEmpty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center;
                 padding: 24px; color: var(--ink-2); border: 1px dashed var(--border); border-radius: var(--radius-sm); background: var(--cream); }
 
+  /* ---- context line above the result (all parts from /trend and /lenses) ---- */
+  .context-line { font-size: .9375rem; font-weight: 700; color: var(--ink-2); display: flex; flex-wrap: wrap; gap: 4px 10px;
+                  align-items: center; margin-bottom: -12px; overflow-wrap: anywhere; }
+  .context-line .ctx-sep { color: var(--teal-strong); font-weight: 800; }
+  .context-line .ctx-part:first-child { color: var(--ink); }
+
+  /* ---- footer strip ---- */
+  .site-foot { border-top: 1px solid var(--border); background: var(--well); color: var(--ink); }
+  .site-foot p { max-width: 1440px; margin: 0 auto; padding: 14px 40px; font-size: .875rem; line-height: 1.45; }
+
   /* ---- "How we test" note ---- */
   .method { display: flex; align-items: flex-start; gap: 16px; background: var(--cream); }
   .method .brand-mark { width: 48px; height: 48px; }
@@ -173,15 +221,19 @@
 
   /* ---- smaller screens ---- */
   @media (max-width: 1023px) {
-    header { padding: 16px 24px; }
+    header { padding: 16px 24px 19px; }
+    .site-foot p { padding: 14px 24px; }
     main { padding: 24px; gap: 24px; }
     body[data-view="globe"] .top-grid, .result-grid { grid-template-columns: minmax(0, 1fr); }
     #card, #resultState { min-height: 0; }
     #resultState { padding: 32px 24px; }
   }
   @media (max-width: 767px) {
-    header { padding: 12px 20px; }
+    header { padding: 12px 16px 15px; }
     header h1 { font-size: 1.125rem; }
+    .header-actions, header #guideControls { gap: 8px; }
+    header #viewToggle button, header #guideControls button { padding: 4px 12px; }
+    .site-foot p { padding: 12px 16px; }
     .brand-mark { width: 36px; height: 36px; font-size: 18px; }
     main { padding: 16px 20px 32px; gap: 16px; }
     .top-grid, .result-grid { gap: 16px; }
@@ -253,6 +305,8 @@
     </section>
   </div>
 
+  <!-- what is on screen: region · lens · variable · period · data source (from /trend and /lenses) -->
+  <p id="contextLine" class="context-line" aria-live="polite" hidden></p>
   <div class="result-grid">
     <div class="result-col">
       <section class="panel" id="resultState" data-state="empty">
@@ -301,6 +355,9 @@
     </div>
   </section>
 </main>
+<footer class="site-foot" id="siteFoot">
+  <p>Regional screening only, not site-level analysis. Data: NASA MERRA-2, GPM IMERG, GLDAS. See the README for methods and limitations.</p>
+</footer>
 <script>
 const $ = id => document.getElementById(id);
 let vars = [], lensList = [];
@@ -340,6 +397,32 @@ function showState(kind) {
   $('stateText').textContent = text;
   $('resultState').hidden = false;
   $('card').classList.add('hidden');
+  showContext(null);
+}
+
+// The context line: region · lens · variable · period · data source of the result on screen.
+// Every part comes from the /trend response (d) and the /lenses list; null hides the line.
+function contextParts(d, lenses) {
+  if (!d || !d.dates || !d.dates.length) return [];
+  const lens = (lenses || []).find(l => l.id === d.lens);
+  const first = d.dates[0].slice(0, 4), last = d.dates[d.dates.length - 1].slice(0, 4);
+  return [d.region_label, lens && `${lens.name} lens`, d.name, first === last ? first : `${first}-${last}`, d.data_source]
+    .filter(Boolean);
+}
+function showContext(d) {
+  const parts = contextParts(d, lensList), line = $('contextLine');
+  line.replaceChildren(...parts.flatMap((t, i) => {
+    const s = document.createElement('span');
+    s.className = 'ctx-part';
+    s.textContent = t;
+    if (!i) return [s];
+    const dot = document.createElement('span');
+    dot.className = 'ctx-sep';
+    dot.setAttribute('aria-hidden', 'true');
+    dot.textContent = '·';
+    return [dot, s];
+  }));
+  line.hidden = !parts.length;
 }
 // a failed request: keep an earlier result on screen, otherwise say so in the result area
 function showFailure(kind) {
@@ -539,6 +622,7 @@ async function run() {
   $('resultState').hidden = true;
   $('card').removeAttribute('aria-busy');
   $('card').classList.remove('hidden');
+  showContext(d);
 }
 
 $('go').onclick = () => { markScenario(null); return run().catch(e => $('err').textContent = 'Something went wrong: ' + e.message); };

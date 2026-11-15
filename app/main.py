@@ -215,6 +215,10 @@ def trend(variable: str, bbox: str, start: str | None = None, end: str | None = 
         "lens_caveat": lenses.caveat(lens) if lens else None,
         "source": source,       # "preset_series" (data/series/) or "gridded" (data/processed/)
         "region": region,       # preset id when the bbox matches one, else null
+        # what the page's context line calls the region: the preset's name (presets.yml), else the box
+        "region_label": region_name or "Custom region ({})".format(", ".join(x.strip() for x in bbox.split(","))),
+        # the user-facing data-source label for the variable's collection (catalog.yml "sources")
+        "data_source": common.load_catalog().get("sources", {}).get(entry["short_name"]),
     }
 
 

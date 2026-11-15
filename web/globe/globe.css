@@ -83,6 +83,8 @@
 .trend-ticks { display: flex; justify-content: space-between; margin-top: 4px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .trend-units { color: var(--ink-2, #6B4A3A); }
 .trend-card .trend-faded { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border, #EAD9BC); color: var(--ink-2, #6B4A3A); }
+.trend-card .trend-sig { margin-top: 6px; font-size: .875rem; font-weight: 700; color: var(--ink, #3A2218); }
+.trend-card .trend-sig[hidden] { display: none; }
 .trend-card .trend-desc { margin-top: 8px; }
 .trend-card .trend-method { margin-top: 8px; color: var(--ink-2, #6B4A3A); }
 .trend-info {

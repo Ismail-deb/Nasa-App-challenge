@@ -988,6 +988,15 @@
   var MAPS_NOTE = 'Trend maps could not be loaded; the globe and the regions still work.';
   var FADED_TEXT = 'Faded cells are not statistically significant (FDR 10%): we can\u2019t tell their ' +
                    'change from natural variation.';
+  var LOW_SHARE = 20;                       // below this % of cells, the legend adds the "not significant" reminder
+  // The legend's significance line, from the variable's map JSON (percent_significant_fdr); '' = hide the line.
+  function significanceText(m) {
+    var pct = m ? Number(m.percent_significant_fdr) : NaN;
+    if (!m || m.percent_significant_fdr === null || m.percent_significant_fdr === undefined || !isFinite(pct)) return '';
+    var share = pct < 1 ? 'Under 1%' : (pct > 99 && pct < 100 ? 'Over 99%' : Math.round(pct) + '%');
+    return share + ' of cells show a statistically significant change after correction.' +
+           (pct < LOW_SHARE ? ' Not significant does not mean no change.' : '');
+  }
   // colour bars by the colormap name in each JSON's scale (matplotlib RdBu_r: blue = min, red = max)
   var COLORMAPS = {
     RdBu_r: ['#053061', '#2166ac', '#4393c3', '#92c5de', '#d1e5f0', '#f7f7f7',
@@ -1135,6 +1144,10 @@
     var units = el('div', 'trend-units');
     legend.appendChild(units);
     legend.appendChild(el('p', 'trend-faded', FADED_TEXT));
+    var sig = el('p', 'trend-sig');
+    sig.id = 'trendSig';
+    sig.hidden = true;                       // until a variable's JSON says how many cells passed
+    legend.appendChild(sig);
     card.appendChild(legend);
 
     var desc = el('p', 'trend-desc');
@@ -1153,7 +1166,7 @@
     card.appendChild(method);
 
     ui.trend = {on: on, body: body, list: list, exp: exp, op: op, caveat: caveat, bar: bar,
-                tMin: tMin, tMax: tMax, units: units, desc: descText, info: info, method: method};
+                tMin: tMin, tMax: tMax, units: units, sig: sig, desc: descText, info: info, method: method};
 
     on.addEventListener('change', function () {
       setTrendShow(v, on.checked);
@@ -1218,6 +1231,8 @@
     t.tMin.textContent = fmt(m.scale.min);
     t.tMax.textContent = fmt(m.scale.max);
     t.units.textContent = unitsOf(m);
+    t.sig.textContent = significanceText(m);
+    t.sig.hidden = !t.sig.textContent;
     t.desc.textContent = m.description || '';
     t.method.textContent = m.method || '';
 
