@@ -167,7 +167,7 @@ DANCE = _const("GUIDE_DANCE")
 
 
 def test_dance_timing_comes_from_the_config():
-    assert DANCE == {"idleSeconds": 30, "quietSeconds": 10, "repeatMinSeconds": 45, "repeatMaxSeconds": 90,
+    assert DANCE == {"idleSeconds": 15, "quietSeconds": 10, "repeatMinSeconds": 45, "repeatMaxSeconds": 90,
                      "durationSeconds": 3}
     assert len(re.findall(r"\bGUIDE_DANCE\s*=", CONFIG)) == 1
     for key in DANCE:

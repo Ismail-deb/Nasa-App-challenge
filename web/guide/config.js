@@ -20,7 +20,7 @@ const GUIDE_IMAGES = {
 //   repeatMinSeconds, repeatMaxSeconds   after each dance, the next one waits a random time in this range
 //   durationSeconds   length of one dance
 // Off with ?calm=1 in the address, with the "Idle dance" header button, or with prefers-reduced-motion.
-const GUIDE_DANCE = {"idleSeconds": 30, "quietSeconds": 10, "repeatMinSeconds": 45, "repeatMaxSeconds": 90, "durationSeconds": 3};
+const GUIDE_DANCE = {"idleSeconds": 15, "quietSeconds": 10, "repeatMinSeconds": 45, "repeatMaxSeconds": 90, "durationSeconds": 3};
 
 // What the guide says when he is clicked outside the tutorial.
 const GUIDE_GREETING = "Hi, I'm {name}, your fox guide. Press any ? button and I'll explain that word, or use the replay button at the top for the tour.";
