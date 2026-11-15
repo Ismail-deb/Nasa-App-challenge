@@ -1,0 +1,70 @@
+{
+ "variable": "M2TMNXRAD/SWGDN",
+ "key": "SWGDN",
+ "name": "Sunlight reaching the ground",
+ "description": "Change in sunlight reaching the ground per decade in each grid cell, 2000-01 to 2026-09; solid colour = significant after correcting for testing many cells at once (FDR 10%), faded = not significant.",
+ "image": "SWGDN.png",
+ "cells": "SWGDN_cells.json",
+ "bounds": {
+  "west": -125.3125,
+  "south": 23.75,
+  "east": -65.9375,
+  "north": 50.25
+ },
+ "bounds_note": "outer edges of the edge cells (cell centres +- half a cell); image row 0 = north",
+ "crop_bbox": [
+  -125.0,
+  24.0,
+  -66.0,
+  50.0
+ ],
+ "grid": {
+  "nlat": 53,
+  "nlon": 95,
+  "dlat": 0.5,
+  "dlon": 0.625,
+  "lat_first": 50.0,
+  "lon_first": -125.0
+ },
+ "units": "W m-2",
+ "display_units": "W/m\u00b2",
+ "slope_units": "W/m\u00b2 per decade",
+ "relative_change": false,
+ "display_conversion": null,
+ "scale": {
+  "min": -3.4148687802003357,
+  "max": 3.4148687802003357,
+  "clip_percentile_abs": 98,
+  "colormap": "RdBu_r",
+  "colors": "red = increase, blue = decrease, white = no change",
+  "opacity_significant": 1.0,
+  "opacity_not_significant": 0.349,
+  "rendering": "nearest-neighbour; one pixel per grid cell"
+ },
+ "period": {
+  "start": "2000-01",
+  "end": "2026-09",
+  "n_months": 321,
+  "months_dropped_missing_everywhere": 0
+ },
+ "method": "Per cell: monthly series, seasonal cycle removed (calendar-month means subtracted); Sen's slope vs time in years, x10 per decade; two-sided Mann-Kendall test with the Hamed & Rao (1998) variance correction using the significant autocorrelations (at 0.05) of lags 1-4 of the ranks of the Sen-detrended series - the same computation as the app's /trend default (stats.analyze, method='corrected'), vectorised over cells; cells with gaps use stats.analyze directly. Multiple testing: Benjamini-Hochberg FDR at q=0.1 across all unmasked cells; 'significant' = passed FDR.",
+ "autocorrelation_method": "Hamed-Rao (1998), lags 1-4, exact (pymannkendall-equivalent)",
+ "fdr_level": 0.1,
+ "mask": "cell centre inside the Natural Earth 1:110m contiguous-US polygon and at least 50% of the cell is land on the GLDAS 0.25-degree land grid (removes ocean, Great Lakes and mostly-water coastal cells)",
+ "n_cells_tested": 2628,
+ "n_significant_fdr": 569,
+ "percent_significant_fdr": 21.65,
+ "n_raw_p_below_0.05": 752,
+ "percent_raw_p_below_0.05": 28.61,
+ "slope_range": [
+  -4.14,
+  2.6
+ ],
+ "source": "NASA M2TMNXRAD v5.12.4",
+ "generated_by": "make_trend_maps.py",
+ "runtime_seconds": 14.6,
+ "file_bytes": {
+  "SWGDN.png": 6895,
+  "SWGDN_cells.json": 37310
+ }
+}

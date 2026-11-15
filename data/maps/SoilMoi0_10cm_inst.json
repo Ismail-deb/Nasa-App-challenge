@@ -1,0 +1,71 @@
+{
+ "variable": "GLDAS_NOAH025_M/SoilMoi0_10cm_inst",
+ "key": "SoilMoi0_10cm_inst",
+ "name": "Soil moisture (top 10 cm)",
+ "description": "Change in soil moisture (top 10 cm) per decade in each grid cell, 2000-01 to 2026-07; solid colour = significant after correcting for testing many cells at once (FDR 10%), faded = not significant.",
+ "image": "SoilMoi0_10cm_inst.png",
+ "cells": "SoilMoi0_10cm_inst_cells.json",
+ "bounds": {
+  "west": -125.0,
+  "south": 24.0,
+  "east": -66.0,
+  "north": 50.0
+ },
+ "bounds_note": "outer edges of the edge cells (cell centres +- half a cell); image row 0 = north",
+ "crop_bbox": [
+  -125.0,
+  24.0,
+  -66.0,
+  50.0
+ ],
+ "grid": {
+  "nlat": 104,
+  "nlon": 236,
+  "dlat": 0.25,
+  "dlon": 0.25,
+  "lat_first": 49.875,
+  "lon_first": -124.875
+ },
+ "units": "kg m-2",
+ "display_units": "kg/m\u00b2 (= mm of water)",
+ "slope_units": "kg/m\u00b2 (= mm of water) per decade",
+ "relative_change": false,
+ "display_conversion": null,
+ "scale": {
+  "min": -1.6958939208984392,
+  "max": 1.6958939208984392,
+  "clip_percentile_abs": 98,
+  "colormap": "RdBu_r",
+  "colors": "red = increase, blue = decrease, white = no change",
+  "opacity_significant": 1.0,
+  "opacity_not_significant": 0.349,
+  "rendering": "nearest-neighbour; one pixel per grid cell"
+ },
+ "period": {
+  "start": "2000-01",
+  "end": "2026-07",
+  "n_months": 319,
+  "months_dropped_missing_everywhere": 0
+ },
+ "method": "Per cell: monthly series, seasonal cycle removed (calendar-month means subtracted); Sen's slope vs time in years, x10 per decade; two-sided Mann-Kendall test with the Hamed & Rao (1998) variance correction using the significant autocorrelations (at 0.05) of lags 1-4 of the ranks of the Sen-detrended series - the same computation as the app's /trend default (stats.analyze, method='corrected'), vectorised over cells; cells with gaps use stats.analyze directly. Multiple testing: Benjamini-Hochberg FDR at q=0.1 across all unmasked cells; 'significant' = passed FDR.",
+ "autocorrelation_method": "Hamed-Rao (1998), lags 1-4, exact (pymannkendall-equivalent)",
+ "fdr_level": 0.1,
+ "mask": "cell centre inside the Natural Earth 1:110m contiguous-US polygon and at least 50% of the cell is land on the GLDAS 0.25-degree land grid (removes ocean, Great Lakes and mostly-water coastal cells)",
+ "n_cells_tested": 13058,
+ "n_significant_fdr": 1996,
+ "percent_significant_fdr": 15.29,
+ "n_raw_p_below_0.05": 3443,
+ "percent_raw_p_below_0.05": 26.37,
+ "slope_range": [
+  -2.64,
+  2.52
+ ],
+ "source": "NASA GLDAS_NOAH025_M v2.1",
+ "generated_by": "make_trend_maps.py",
+ "runtime_seconds": 68.5,
+ "caveat": "The map shows straight-edged rectangular blocks and north-south stripes that follow grid lines, not geography. These are most likely artefacts of changes in the GLDAS-2.1 model's input (forcing) data, not real trends; treat individual patterns with caution.",
+ "file_bytes": {
+  "SoilMoi0_10cm_inst.png": 34869,
+  "SoilMoi0_10cm_inst_cells.json": 185668
+ }
+}

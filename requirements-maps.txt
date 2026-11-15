@@ -1,0 +1,5 @@
+# Extra packages for make_trend_maps.py only (not needed to run the app).
+# pyogrio bundles the Natural Earth 1:110m countries file used for the US mask and outline.
+pyogrio
+shapely
+matplotlib

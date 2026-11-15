@@ -1,0 +1,71 @@
+{
+ "variable": "GLDAS_NOAH025_M/Evap_tavg",
+ "key": "Evap_tavg",
+ "name": "Evaporation",
+ "description": "Change in evaporation per decade in each grid cell, 2000-01 to 2026-07; solid colour = significant after correcting for testing many cells at once (FDR 10%), faded = not significant.",
+ "image": "Evap_tavg.png",
+ "cells": "Evap_tavg_cells.json",
+ "bounds": {
+  "west": -125.0,
+  "south": 24.0,
+  "east": -66.0,
+  "north": 50.0
+ },
+ "bounds_note": "outer edges of the edge cells (cell centres +- half a cell); image row 0 = north",
+ "crop_bbox": [
+  -125.0,
+  24.0,
+  -66.0,
+  50.0
+ ],
+ "grid": {
+  "nlat": 104,
+  "nlon": 236,
+  "dlat": 0.25,
+  "dlon": 0.25,
+  "lat_first": 49.875,
+  "lon_first": -124.875
+ },
+ "units": "kg m-2 s-1",
+ "display_units": "mm/day",
+ "slope_units": "mm/day per decade",
+ "relative_change": false,
+ "display_conversion": "mean rate in kg/m2 per second x 86,400 s = mm/day of water",
+ "scale": {
+  "min": -0.2362365882170834,
+  "max": 0.2362365882170834,
+  "clip_percentile_abs": 98,
+  "colormap": "RdBu_r",
+  "colors": "red = increase, blue = decrease, white = no change",
+  "opacity_significant": 1.0,
+  "opacity_not_significant": 0.349,
+  "rendering": "nearest-neighbour; one pixel per grid cell"
+ },
+ "period": {
+  "start": "2000-01",
+  "end": "2026-07",
+  "n_months": 319,
+  "months_dropped_missing_everywhere": 0
+ },
+ "method": "Per cell: monthly series, seasonal cycle removed (calendar-month means subtracted); Sen's slope vs time in years, x10 per decade; two-sided Mann-Kendall test with the Hamed & Rao (1998) variance correction using the significant autocorrelations (at 0.05) of lags 1-4 of the ranks of the Sen-detrended series - the same computation as the app's /trend default (stats.analyze, method='corrected'), vectorised over cells; cells with gaps use stats.analyze directly. Multiple testing: Benjamini-Hochberg FDR at q=0.1 across all unmasked cells; 'significant' = passed FDR.",
+ "autocorrelation_method": "Hamed-Rao (1998), lags 1-4, exact (pymannkendall-equivalent)",
+ "fdr_level": 0.1,
+ "mask": "cell centre inside the Natural Earth 1:110m contiguous-US polygon and at least 50% of the cell is land on the GLDAS 0.25-degree land grid (removes ocean, Great Lakes and mostly-water coastal cells)",
+ "n_cells_tested": 13058,
+ "n_significant_fdr": 7020,
+ "percent_significant_fdr": 53.76,
+ "n_raw_p_below_0.05": 6944,
+ "percent_raw_p_below_0.05": 53.18,
+ "slope_range": [
+  -0.321,
+  0.372
+ ],
+ "source": "NASA GLDAS_NOAH025_M v2.1",
+ "generated_by": "make_trend_maps.py",
+ "runtime_seconds": 67.4,
+ "caveat": "The map shows straight-edged rectangular blocks and north-south stripes that follow grid lines, not geography. These are most likely artefacts of changes in the GLDAS-2.1 model's input (forcing) data, not real trends; treat individual patterns with caution.",
+ "file_bytes": {
+  "Evap_tavg.png": 31429,
+  "Evap_tavg_cells.json": 197751
+ }
+}
