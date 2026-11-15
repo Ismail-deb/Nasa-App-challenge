@@ -319,7 +319,7 @@ All numbers and results shown by the app come from NASA data processed by this p
 
 | | |
 |---|---|
-| **Team** | Ismail Abrahams ([@Ismail-deb](https://github.com/Ismail-deb)) · [@AbraarSayed]()[@Ethomas-32](https://github.com/Ethomas-32)[@Moufire-7]()(@Ofentse) |
+| **Team** | Ismail Abrahams ([@Ismail-deb](https://github.com/Ismail-deb)) · Mohamed Abraar Sayed [@AbraarSayed]() Enrique Thomas[@Ethomas-32](https://github.com/Ethomas-32) Mohamed Awaale[@Moufire-7](https://github.com/Moufire-7)(@Ofentse) |
 | **Live demo** | (https://nasa-app-challenge-lilac.vercel.app) |
 | **Repository** | https://github.com/Ismail-deb/Nasa-App-challenge |
 | **Challenge** | NASA Space Apps Challenge 2026 ·  |
