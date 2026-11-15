@@ -1,0 +1,107 @@
+/* The optional guide (web/guide/guide.js): floating helper, speech bubble, spotlight, "?" tips. */
+
+/* ---- header controls: "<name>: on/off" and "Replay with <name>" ---- */
+#guideControls { float: right; display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 6px 12px; }
+#guideControls button {
+  background: rgba(255, 255, 255, .14); color: #fff; border: 1px solid rgba(255, 255, 255, .7);
+  padding: 5px 10px; font-size: .85rem; border-radius: 6px;
+}
+#guideControls button:hover { background: rgba(255, 255, 255, .26); }
+#guideControls button:focus-visible { outline: 3px solid #ffb703; outline-offset: 2px; }
+
+/* ---- "?" tip buttons ---- */
+button.tip {
+  display: inline-flex; align-items: center; justify-content: center; vertical-align: middle;
+  width: 20px; height: 20px; margin-left: 5px; padding: 0; border-radius: 50%;
+  background: #e8eef8; color: #0b3d91; border: 1px solid #0b3d91; font-size: .75rem; font-weight: 700; line-height: 1;
+}
+button.tip:hover { background: #0b3d91; color: #fff; }
+button.tip:focus-visible, .guide button:focus-visible { outline: 3px solid #ffb703; outline-offset: 2px; }
+button.tip[hidden], .guide[hidden], .guide [hidden], .guide-spot[hidden] { display: none; }
+
+/* ---- floating panel ---- */
+.guide {
+  position: fixed; right: 16px; bottom: 16px; z-index: 1000;
+  display: flex; align-items: flex-end; gap: 10px;
+  max-width: min(440px, calc(100vw - 32px)); pointer-events: none;
+}
+.guide > * { pointer-events: auto; }
+.guide.guide--top { bottom: auto; top: 16px; align-items: flex-start; }
+
+.guide-avatar {
+  flex: none; width: 76px; height: 76px; padding: 4px; border-radius: 50%;
+  background: #fff; border: 2px solid #0b3d91; cursor: pointer;
+  box-shadow: 0 3px 10px rgba(11, 35, 80, .3);
+}
+.guide-svg { display: block; width: 100%; height: 100%; overflow: visible; }
+
+.guide-bubble {
+  background: #fff; color: #1b2733; border: 2px solid #0b3d91; border-radius: 12px;
+  padding: 10px 12px; font-size: .95rem; line-height: 1.45;
+  box-shadow: 0 3px 14px rgba(11, 35, 80, .3);
+}
+.guide-bubble p { margin: 0; }
+.guide-name { font-weight: 700; color: #0b3d91; font-size: .8rem; margin-bottom: 2px; }
+.guide-rest { visibility: hidden; }
+.guide-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.guide-actions { display: flex; align-items: center; justify-content: flex-end; gap: 6px; margin-top: 8px; }
+.guide-progress { margin-right: auto; font-size: .78rem; color: #4a5a6a; }
+.guide-actions button { padding: 5px 12px; font-size: .85rem; border-radius: 6px; background: #e8eef8; color: #0b3d91; border: 1px solid #0b3d91; }
+.guide-actions button[data-act="next"] { background: #0b3d91; color: #fff; }
+
+/* during the tutorial: extra room below the page, so the last panel can scroll clear of the bubble */
+body.guide-touring { padding-bottom: 50vh; }
+
+/* ---- spotlight: a hole in a dark overlay; clicks pass through to the page ---- */
+.guide-spot {
+  position: fixed; z-index: 999; border-radius: 8px; pointer-events: none;
+  box-shadow: 0 0 0 3px #ffb703, 0 0 0 200vmax rgba(8, 20, 40, .55);
+  transition: left .25s ease, top .25s ease, width .25s ease, height .25s ease;
+}
+
+/* ---- the character ---- */
+.guide-body { fill: #fff; stroke: #0b3d91; stroke-width: 2.5; }
+.guide-visor { fill: #10223f; }
+.guide-eyes circle { fill: #7fe3ff; }
+.guide-smile { fill: none; stroke: #0b3d91; stroke-width: 2; stroke-linecap: round; }
+.guide-wing rect { fill: #2f6fd6; stroke: #0b3d91; stroke-width: 1.5; }
+.guide-wing path { fill: none; stroke: #cfe0ff; stroke-width: 1; }
+.guide-strut { stroke: #0b3d91; stroke-width: 3; }
+.guide-mast { stroke: #0b3d91; stroke-width: 2.5; stroke-linecap: round; }
+.guide-beacon { fill: #ffb703; stroke: #8a5a00; stroke-width: 1; }
+.guide-thrust { fill: #9ad1ff; opacity: .7; }
+
+.guide-drone, .guide-eyes, .guide-beacon { transform-box: fill-box; transform-origin: center; }
+.guide-drone { transition: transform .35s ease; }
+.guide-eyes { transition: transform .3s ease; transform: translate(var(--guide-look-x, 0px), var(--guide-look-y, 0px)); }
+
+/* state 1, idle: gentle bobbing */
+.guide[data-state="idle"] .guide-drone { animation: guide-bob 3.2s ease-in-out infinite; }
+/* state 2, talking: the antenna light pulses while the text types */
+.guide[data-state="talking"] .guide-beacon { animation: guide-pulse .55s ease-in-out infinite; }
+/* state 3, pointing: turned toward the highlighted element (talking keeps the turn) */
+.guide[data-state="talking"] .guide-drone,
+.guide[data-state="pointing"] .guide-drone { transform: rotate(var(--guide-tilt, 0deg)); }
+.guide[data-state="pointing"] .guide-beacon { fill: #ffd166; }
+
+@keyframes guide-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
+@keyframes guide-pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: .35; transform: scale(1.35); } }
+
+/* no motion on request: nothing animates and (in guide.js) the text appears at once */
+@media (prefers-reduced-motion: reduce) {
+  .guide, .guide *, .guide-spot { animation: none !important; transition: none !important; }
+}
+
+/* Narrow windows (the page content is up to 980px wide): collapse to a small icon so the chart
+   and the result card stay readable, and leave room to scroll the last panel clear of the icon. */
+@media (max-width: 1200px) {
+  .guide { right: 8px; bottom: 8px; gap: 6px; max-width: calc(100vw - 16px); }
+  .guide.guide--top { top: 8px; }
+  .guide-avatar { width: 44px; height: 44px; padding: 2px; }
+  .guide-bubble { font-size: .9rem; padding: 8px 10px; }
+  body.guide-on { padding-bottom: 60px; }
+  body.guide-on.guide-touring { padding-bottom: 50vh; }
+}
+@media (max-width: 700px) {
+  #guideControls { float: none; margin: 0 0 8px; }
+}

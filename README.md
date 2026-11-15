@@ -80,11 +80,18 @@ git pull
 Then stop the server (Ctrl+C) and start it again (step 4), and reload the browser page with
 **Ctrl+F5** so it does not show an old cached copy.
 
+### The guide (optional)
+On the first visit a small animated guide walks through the page in 7 steps (Skip ends it). The
+header has an on/off switch for the guide and a replay button; the "?" buttons on the result card
+make it explain a term. No voice, no video, no extra downloads. Its name, tutorial lines and tips
+are in `web/guide/config.js` (the name is defined there once, as `GUIDE_NAME`). To see the
+first-visit tutorial again, use the replay button, or clear the site data for the page.
+
 ### Run the tests (optional)
 ```
 python -m pytest -q
 ```
-All tests are offline (no NASA access needed).
+All tests are offline (no NASA access needed). A few of them click through the page in the Edge or Chrome already installed on the machine (headless, no window); they are skipped if neither is found, or with the environment variable `NO_BROWSER_TESTS=1`.
 
 ### Troubleshooting
 | Problem | Fix |

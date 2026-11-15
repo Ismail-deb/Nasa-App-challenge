@@ -1,0 +1,187 @@
+<!doctype html><meta charset="utf-8"><title>harness: guide</title>
+<iframe id="f" width="1300" height="860"></iframe>
+<script>
+// Walks through the guide in the real page and reports what happened. See tests/test_page_browser.py.
+//   guide.html            first visit, the 7 steps, tips, second visit, toggle, replay, narrow, failures
+//   guide.html?reduced=1  short run for prefers-reduced-motion (the browser is started with it forced)
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const reducedRun = new URLSearchParams(location.search).has('reduced');
+const NAME = reducedRun ? 'guide_reduced' : 'guide';
+const out = {errors: [], steps: [], tips: {}};
+const post = (path, body) => fetch(path, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body || {})});
+const f = document.getElementById('f');
+let d, w, $, loads = 0;
+
+const waitFor = async (fn, ms = 8000) => {
+  for (let t = 0; t < ms; t += 50) { try { if (fn()) return true; } catch (e) {} await sleep(50); }
+  return false;
+};
+
+// (re)load the page; errors are captured from the moment the new document exists
+async function load() {
+  const old = f.contentWindow;
+  const loaded = new Promise(r => f.addEventListener('load', r, {once: true}));
+  f.src = '/?load=' + (++loads);
+  for (let i = 0; i < 4000; i++) {
+    const cw = f.contentWindow;
+    try { if (cw && cw.location.search === '?load=' + loads && cw.document && !cw.__hooked) { hook(cw); break; } } catch (e) {}
+    await sleep(1);
+  }
+  await loaded;
+  w = f.contentWindow; d = f.contentDocument; $ = id => d.getElementById(id);
+  if (!w.__hooked) hook(w);
+  await waitFor(() => d.querySelectorAll('#demos button').length > 0);
+}
+function hook(cw) {
+  cw.__hooked = true;
+  cw.addEventListener('error', e => out.errors.push(`load ${loads}: ${e.message}`));
+  cw.addEventListener('unhandledrejection', e => out.errors.push(`load ${loads}: rejection: ${e.reason}`));
+  for (const k of ['error', 'warn']) {
+    const orig = cw.console[k];
+    cw.console[k] = (...a) => { out.errors.push(`load ${loads}: console.${k}: ${a.join(' ')}`); orig.apply(cw.console, a); };
+  }
+}
+
+const bubbleOpen = () => !!$('guideBubble') && !$('guideBubble').hidden && !$('guide').hidden;
+const box = el => { const b = el.getBoundingClientRect(); return {left: b.left, top: b.top, right: b.right, bottom: b.bottom, width: b.width, height: b.height}; };
+const overlap = (a, b) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+const text = sel => (d.querySelector(sel) || {textContent: null}).textContent;
+const visible = el => !!el && el.getBoundingClientRect().width > 0;
+function unionRect(sel) {
+  let r = null;
+  d.querySelectorAll(sel).forEach(el => {
+    const b = el.getBoundingClientRect();
+    if (b.width < 1 || b.height < 1) return;
+    r = r ? {left: Math.min(r.left, b.left), top: Math.min(r.top, b.top), right: Math.max(r.right, b.right), bottom: Math.max(r.bottom, b.bottom)} : box(el);
+  });
+  return r;
+}
+const settled = () => waitFor(() => $('guide').dataset.state !== 'talking', 20000);
+
+async function walkTour(record) {
+  const steps = w.eval('GUIDE_STEPS');
+  for (let i = 0; i < steps.length; i++) {
+    const g = $('guide'), stateAtStart = g.dataset.state, typedAtStart = text('.guide-typed');
+    if (steps[i].needsResult) await waitFor(() => !$('card').classList.contains('hidden'));
+    await settled();
+    await sleep(500);                                  // spotlight transition
+    // where the spotlight is going (its CSS transition may still be running)
+    const s = $('guideSpot'), px = k => parseFloat(s.style[k]), want = unionRect(steps[i].target);
+    const sb = {left: px('left'), top: px('top'), right: px('left') + px('width'), bottom: px('top') + px('height'), width: px('width')};
+    record.push({
+      id: steps[i].id, spoken: text('.guide-sr'), typed: text('.guide-typed'), typedAtStart, progress: text('.guide-progress'),
+      stateAtStart, stateAfter: g.dataset.state, next: text('[data-act="next"]'),
+      backShown: !d.querySelector('[data-act="back"]').hidden, skipShown: !d.querySelector('[data-act="skip"]').hidden,
+      spotShown: !s.hidden && sb.width > 0, targetVisible: !!want,
+      spotOnTarget: !!want && Math.abs(sb.left - (want.left - 6)) < 2 && Math.abs(sb.top - (want.top - 6)) < 2 &&
+                    Math.abs(sb.right - (want.right + 6)) < 2 && Math.abs(sb.bottom - (want.bottom + 6)) < 2,
+      targetInView: !!want && want.top >= 0 && want.top < w.innerHeight,
+      // a target taller than the space left beside the bubble cannot be shown whole
+      targetFits: !!want && want.bottom - want.top <= w.innerHeight - box($('guide')).height - 48,
+      tilt: g.style.getPropertyValue('--guide-tilt'), lookY: g.style.getPropertyValue('--guide-look-y'),
+      bubbleCoversTarget: !!want && (overlap(box($('guideBubble')), want) || overlap(box($('guideAvatar')), want)),
+      focusOnNext: d.activeElement === d.querySelector('[data-act="next"]'),
+    });
+    d.querySelector('[data-act="next"]').click();
+    await sleep(100);
+  }
+}
+
+async function main() {
+  await post('/__harness/mode/normal');
+  await load();
+  out.name = w.eval('GUIDE_NAME');
+
+  // ---- first visit: the tutorial starts by itself
+  out.firstVisitStarted = await waitFor(bubbleOpen, 3000);
+  if (reducedRun) {
+    out.reduced = {matches: w.matchMedia('(prefers-reduced-motion: reduce)').matches, state: $('guide').dataset.state,
+                   typed: text('.guide-typed'), spoken: text('.guide-sr'),
+                   animation: w.getComputedStyle(d.querySelector('.guide-drone')).animationName,
+                   beacon: w.getComputedStyle(d.querySelector('.guide-beacon')).animationName};
+    d.querySelector('[data-act="next"]').click(); await sleep(50);
+    out.reduced.step2 = {state: $('guide').dataset.state, typed: text('.guide-typed'), spoken: text('.guide-sr')};
+    return;
+  }
+  out.idleAnimation = null;
+  await walkTour(out.steps);
+  out.afterFinish = {bubbleOpen: bubbleOpen(), spotHidden: $('guideSpot').hidden, state: $('guide').dataset.state,
+                     seen: w.localStorage.getItem('estd.guide.tutorialSeen'), guideShown: visible($('guideAvatar')),
+                     idleAnimation: w.getComputedStyle(d.querySelector('.guide-drone')).animationName,
+                     toggle: text('#guideToggle'), replay: text('#guideReplay'), pressed: $('guideToggle').getAttribute('aria-pressed'),
+                     avatarLabel: $('guideAvatar').getAttribute('aria-label'), cardShown: !$('card').classList.contains('hidden'),
+                     avatarWidth: box($('guideAvatar')).width};
+
+  // ---- "?" tips
+  for (const key of Object.keys(w.eval('GUIDE_TIPS'))) {
+    if (key === 'variation') $('verdictTip').dataset.tip = 'variation';      // what run() sets for a low-reliability result
+    const b = d.querySelector(`button.tip[data-tip="${key}"]`);
+    if (!b) { out.tips[key] = {found: false}; continue; }
+    b.focus(); b.click();
+    const opened = await waitFor(bubbleOpen, 2000);
+    const stateAtStart = $('guide').dataset.state;
+    await settled();
+    out.tips[key] = {found: true, shown: visible(b), label: b.getAttribute('aria-label'), opened, stateAtStart,
+                     stateAfter: $('guide').dataset.state, spoken: text('.guide-sr'), typed: text('.guide-typed'),
+                     closeShown: !d.querySelector('[data-act="close"]').hidden, nextShown: !d.querySelector('[data-act="next"]').hidden,
+                     spotHidden: $('guideSpot').hidden};
+    d.dispatchEvent(new w.KeyboardEvent('keydown', {key: 'Escape', bubbles: true}));
+    await sleep(50);
+    out.tips[key].closedByEscape = !bubbleOpen();
+    out.tips[key].focusBack = d.activeElement === b;
+  }
+  $('verdictTip').dataset.tip = 'significant';
+
+  // ---- clicking the character greets; clicking again closes
+  $('guideAvatar').click(); await sleep(50); await settled();
+  out.greeting = {open: bubbleOpen(), spoken: text('.guide-sr')};
+  $('guideAvatar').click(); await sleep(50);
+  out.greeting.closed = !bubbleOpen();
+
+  // ---- second visit: no tutorial
+  await load(); await sleep(1500);
+  out.secondVisit = {bubbleOpen: bubbleOpen(), guideShown: visible($('guideAvatar')), toggle: text('#guideToggle')};
+
+  // ---- toggle off, persisted
+  $('guideToggle').click(); await sleep(50);
+  out.off = {toggle: text('#guideToggle'), pressed: $('guideToggle').getAttribute('aria-pressed'), guideShown: visible($('guideAvatar')),
+             stored: w.localStorage.getItem('estd.guide.enabled')};
+  await load(); await sleep(1000);
+  out.offReload = {toggle: text('#guideToggle'), guideShown: visible($('guideAvatar')), bubbleOpen: bubbleOpen()};
+  $('demos').querySelector('button').click();
+  await waitFor(() => !$('card').classList.contains('hidden'));
+  d.querySelector('button.tip[data-tip="pvalue"]').click(); await sleep(50);
+  out.offReload.tipStillAnswers = bubbleOpen();
+  d.querySelector('[data-act="close"]').click(); await sleep(50);
+  out.offReload.hiddenAgainAfterClose = !visible($('guideAvatar'));
+
+  // ---- replay turns the guide on and restarts the tutorial; Skip ends it
+  $('guideReplay').click(); await sleep(100);
+  out.replay = {open: bubbleOpen(), progress: text('.guide-progress'), toggle: text('#guideToggle'),
+                stored: w.localStorage.getItem('estd.guide.enabled')};
+  d.querySelector('[data-act="skip"]').click(); await sleep(50);
+  out.replay.skipped = !bubbleOpen() && $('guideSpot').hidden;
+
+  // ---- narrow window: small icon when idle; during the tour the bubble keeps off the chart and the card
+  f.width = 390; await sleep(300);
+  out.narrow = {width: w.innerWidth, avatarWidth: box($('guideAvatar')).width, bubbleOpen: bubbleOpen(), steps: [],
+                bodyPadding: w.getComputedStyle(d.body).paddingBottom};
+  $('guideReplay').click(); await sleep(100);
+  await walkTour(out.narrow.steps);
+  f.width = 1300; await sleep(200);
+
+  // ---- failures: the guide's files missing or broken -> the page works, nothing in the console
+  out.failures = {};
+  for (const mode of ['missing', 'broken', 'nostorage']) {
+    await post('/__harness/mode/' + mode);
+    await load(); await sleep(500);
+    $('demos').querySelectorAll('button')[1].click();
+    const card = await waitFor(() => !$('card').classList.contains('hidden'));
+    out.failures[mode] = {card, title: $('cardTitle').textContent, guide: !!$('guide'), controls: $('guideControls').children.length,
+                          tipsShown: [...d.querySelectorAll('button.tip')].filter(visible).length};
+  }
+  await post('/__harness/mode/normal');
+}
+
+main().catch(e => out.errors.push('harness: ' + (e && e.stack || e))).then(() => post('/__harness/result/' + NAME, out));
+</script>
