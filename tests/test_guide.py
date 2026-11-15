@@ -25,9 +25,16 @@ def _const(name: str):
 
 NAME = _const("GUIDE_NAME")
 STEPS = _const("GUIDE_STEPS")
+GLOBE_STEPS = _const("GUIDE_STEPS_GLOBE")
+GLOBE_JS = (WEB / "globe" / "globe.js").read_text(encoding="utf-8")
 TIPS = _const("GUIDE_TIPS")
 GREETING = _const("GUIDE_GREETING")
 PAGE_IDS = set(re.findall(r'\bid="([^"]+)"', PAGE))
+# Globe view's elements are built by web/globe/globe.js: ids written in its markup or set as .id = '...'
+GLOBE_IDS = set(re.findall(r'\bid="([^"]+)"', GLOBE_JS)) | set(re.findall(r"\.id = '([^']+)'", GLOBE_JS))
+# every tutorial: (view, the ids its targets may use, its steps)
+TOURS = {"classic": (PAGE_IDS, STEPS), "globe": (PAGE_IDS | GLOBE_IDS, GLOBE_STEPS)}
+ALL_STEPS = [(view, step) for view, (_, steps) in TOURS.items() for step in steps]
 
 
 # ---------------------------------------------------------------- the name, defined once
@@ -61,12 +68,35 @@ def test_every_label_is_built_from_the_name():
 
 # ---------------------------------------------------------------- tutorial steps
 
-def test_tutorial_has_the_seven_steps_in_order():
+def test_classic_tutorial_steps_are_unchanged_and_in_order():
     assert [s["id"] for s in STEPS] == ["welcome", "demos", "lens", "chart", "result", "meaning", "region"]
 
 
-@pytest.mark.parametrize("step", STEPS, ids=[s["id"] for s in STEPS])
-def test_every_step_has_text_and_a_target_that_exists_in_the_page(step):
+def test_globe_tutorial_is_a_separate_list_with_its_steps_in_order():
+    assert [s["id"] for s in GLOBE_STEPS] == ["globe", "regions", "switch", "variables", "legend", "scenarios"]
+    assert len(re.findall(r"\bGUIDE_STEPS_GLOBE\s*=", CONFIG)) == 1 and len(re.findall(r"\bGUIDE_STEPS\s*=", CONFIG)) == 1
+    by_id = {s["id"]: s for s in GLOBE_STEPS}
+    assert by_id["globe"]["text"] == "This is Earth. Drag to spin it and scroll to zoom."
+    assert by_id["regions"]["text"] == "The cyan boxes are our demo regions. Click one to see its trend below."
+    assert by_id["switch"]["text"] == "Turn the trend map on or off here."
+    assert by_id["variables"]["text"] == "Pick a variable here. Temperature is the clearest one."
+    assert "not statistically significant, which is not the same as no trend" in by_id["legend"]["text"]
+    assert all(w in by_id["scenarios"]["text"] for w in ("solar", "wind", "hydro", "farming"))
+    # the targets are the real elements: the globe, the region boxes, the switch, the list, the legend, the cards
+    assert [s["target"] for s in GLOBE_STEPS] == ["#globeBox", "#globeRegions", "#trendSwitch", "#trendList", "#trendLegend", "#demos"]
+    assert by_id["regions"]["globeAction"] == "showRegions" and "state.showRegions = function ()" in GLOBE_JS
+
+
+def test_step_texts_live_in_the_config_only():
+    """No tutorial sentence is written in the guide's code, the globe's code or the page."""
+    for _, step in ALL_STEPS:
+        for text in (GUIDE_JS, GLOBE_JS, PAGE):
+            assert step["text"] not in text and step["text"][:40] not in text, step["id"]
+
+
+@pytest.mark.parametrize("view,step", ALL_STEPS, ids=[f"{v}:{s['id']}" for v, s in ALL_STEPS])
+def test_every_step_has_text_and_a_target_that_exists_in_the_page(view, step):
+    PAGE_IDS = TOURS[view][0]                                           # the ids of the view this step is shown in
     text = step["text"].strip()
     assert text and len(text) <= 240                                    # one or two short sentences
     assert 1 <= len(re.findall(r"[.!?](?:\s|\"|$)", text)) <= 4
@@ -112,6 +142,18 @@ def test_the_four_tips_have_text_and_a_button_in_the_page():
 def test_first_visit_logic_and_persisted_toggle():
     assert "var KEY_ON = 'estd.guide.enabled';" in GUIDE_JS and "var KEY_SEEN = 'estd.guide.tutorialSeen';" in GUIDE_JS
     assert "if (enabled && store.get(KEY_SEEN) === null) return startTour();" in GUIDE_JS
+    # Globe view has its own first-visit flag and its own list; replay follows the view that is shown
+    assert "var KEY_SEEN_GLOBE = 'estd.guide.globeTutorialSeen';" in GUIDE_JS
+    globe_start = GUIDE_JS.split("function startGlobeTour() {")[1].split("}")[0]
+    assert "STEPS = GLOBE;" in globe_start and "store.set(KEY_SEEN_GLOBE, '1')" in globe_start
+    assert "if (store.get(KEY_SEEN_GLOBE) !== null) return undefined;" in GUIDE_JS
+    assert "if (globeActive()) return startGlobeTour();" in GUIDE_JS.split("function startTour() {")[1].split("}")[0]
+    assert "on(replayBtn, 'click', function () { setEnabled(true); return startTour(); });" in GUIDE_JS
+    # only a globe that is running counts: a failed globe (back in Classic view) gets the Classic tutorial
+    assert "return GLOBE.length > 0 && b.view === 'globe' && b.globe === 'ready';" in GUIDE_JS
+    assert "flag('globe', 'failed');" in GLOBE_JS and "document.body.dataset.view = view;" in GLOBE_JS
+    # a step whose element is missing is skipped
+    assert "if (STEPS[i].needsResult || targetOf(STEPS[i])) return i;" in GUIDE_JS
     start = GUIDE_JS.split("function startTour() {")[1].split("}")[0]
     assert "store.set(KEY_SEEN, '1')" in start                          # so it never starts by itself again
     assert "var enabled = store.get(KEY_ON) !== 'off';" in GUIDE_JS

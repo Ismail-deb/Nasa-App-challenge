@@ -9,7 +9,7 @@
    it works without it; nothing is ever written to the console.
 
    Texts, the guide's name and the picture addresses come from config.js
-   (GUIDE_NAME, GUIDE_IMAGES, GUIDE_STEPS, GUIDE_TIPS). */
+   (GUIDE_NAME, GUIDE_IMAGES, GUIDE_STEPS, GUIDE_STEPS_GLOBE, GUIDE_TIPS). */
 (function () {
   'use strict';
 
@@ -47,6 +47,7 @@
 
   var KEY_ON = 'estd.guide.enabled';          // "on" | "off" (missing = on)
   var KEY_SEEN = 'estd.guide.tutorialSeen';   // set once the tutorial has been started
+  var KEY_SEEN_GLOBE = 'estd.guide.globeTutorialSeen';   // the same, for the Globe-view tutorial
   var KEY_POS = 'estd.guide.pos';             // where he stands: {"x": 0..1, "y": 0..1} across the free area
   var KEY_TUCK = 'estd.guide.tucked';         // "yes" | "no" (missing = tucked only in a narrow window)
 
@@ -82,6 +83,9 @@
     if (typeof GUIDE_STEPS === 'undefined' || !Array.isArray(GUIDE_STEPS) || !GUIDE_STEPS.length) return;
     if (typeof GUIDE_TIPS === 'undefined' || !GUIDE_TIPS || typeof GUIDE_TIPS !== 'object') return;
     var NAME = GUIDE_NAME, STEPS = GUIDE_STEPS, TIPS = GUIDE_TIPS;
+    // two tutorials: STEPS is the one that is running (or ran last)
+    var CLASSIC = GUIDE_STEPS;
+    var GLOBE = typeof GUIDE_STEPS_GLOBE !== 'undefined' && Array.isArray(GUIDE_STEPS_GLOBE) ? GUIDE_STEPS_GLOBE : [];
     var GREETING = typeof GUIDE_GREETING === 'string' ? GUIDE_GREETING : "Hi, I'm {name}.";
     var IMAGES = typeof GUIDE_IMAGES === 'object' && GUIDE_IMAGES ? GUIDE_IMAGES : null;
     var haveArt = !!IMAGES && POSES.every(function (p) { return typeof IMAGES[p] === 'string' && IMAGES[p]; });
@@ -387,7 +391,7 @@
       show(btn.back, touring && tour > 0);
       show(btn.next, touring);
       show(btn.close, !touring);
-      btn.next.textContent = touring && tour === STEPS.length - 1 ? 'Finish' : 'Next';
+      btn.next.textContent = touring && stepFrom(tour + 1, 1) < 0 ? 'Finish' : 'Next';
       progress.textContent = touring ? 'Step ' + (tour + 1) + ' of ' + STEPS.length : '';
     }
 
@@ -405,6 +409,7 @@
       layout();                                        // back to where he stands
       if (returnFocus && document.contains(returnFocus)) returnFocus.focus();
       returnFocus = null;
+      window.setTimeout(safe(maybeGlobeTour), 0);      // Globe view was opened meanwhile: its own first visit
     }
 
     // ------------------------------------------------------------ tutorial
@@ -428,10 +433,37 @@
       });
     }
 
+    // ---- which tutorial: the page (web/globe/globe.js) says on <body> which view is shown and how the globe is doing
+    function globeActive() {
+      var b = document.body.dataset;
+      return GLOBE.length > 0 && b.view === 'globe' && b.globe === 'ready';
+    }
+    function targetOf(step) { return rectOf(step.target) || (step.fallback ? rectOf(step.fallback) : null); }
+    // the first step from i on (dir 1) or back (dir -1) whose element is in the page; -1 when there is none.
+    // A step that will show a result first is taken as it is.
+    function stepFrom(i, dir) {
+      for (; i >= 0 && i < STEPS.length; i += dir) {
+        if (STEPS[i].needsResult || targetOf(STEPS[i])) return i;
+      }
+      return -1;
+    }
+    // a step may ask the globe to do something first (turn so that the regions are in sight)
+    function globeAction(step) {
+      var g = window.EstdGlobe;
+      if (!step.globeAction || !g || typeof g[step.globeAction] !== 'function') return false;
+      try { g[step.globeAction](); } catch (e) { return false; }
+      return true;
+    }
+
     function showStep(i) {
       var step = STEPS[i], my = ++seq;
       tour = i;
       returnFocus = null;
+      if (globeAction(step)) {                         // the globe has moved: measure again once it has
+        [200, 700].forEach(function (ms) {
+          window.setTimeout(safe(function () { if (my === seq) sync(); }), ms);
+        });
+      }
       current = function () {
         var r = rectOf(step.target);
         return r || (step.fallback ? rectOf(step.fallback) : null);
@@ -451,8 +483,28 @@
     }
 
     function startTour() {
+      if (globeActive()) return startGlobeTour();      // the tutorial of the view that is shown
+      STEPS = CLASSIC;
       store.set(KEY_SEEN, '1');                        // first visit only: never starts by itself again
       return showStep(0);
+    }
+
+    function startGlobeTour() {
+      STEPS = GLOBE;
+      store.set(KEY_SEEN_GLOBE, '1');                  // its own first-visit flag
+      var first = stepFrom(0, 1);
+      return first < 0 ? undefined : showStep(first);
+    }
+
+    // Globe view opened for the first time (and the globe and its trend maps have settled): its tutorial.
+    // Leaving Globe view while that tutorial runs ends it.
+    function maybeGlobeTour() {
+      var b = document.body.dataset;
+      if (tour >= 0 && STEPS === GLOBE && b.view !== 'globe') return closeBubble();
+      if (!enabled || tour >= 0 || !bubble.hidden || !globeActive()) return undefined;
+      if (b.trend !== 'ready' && b.trend !== 'failed') return undefined;
+      if (store.get(KEY_SEEN_GLOBE) !== null) return undefined;
+      return startGlobeTour();
     }
 
     // ------------------------------------------------------------ tips and greeting
@@ -544,8 +596,8 @@
     });
 
     // ------------------------------------------------------------ wiring
-    on(btn.next, 'click', function () { return tour >= STEPS.length - 1 ? closeBubble() : showStep(tour + 1); });
-    on(btn.back, 'click', function () { return tour > 0 ? showStep(tour - 1) : undefined; });
+    on(btn.next, 'click', function () { var n = stepFrom(tour + 1, 1); return n < 0 ? closeBubble() : showStep(n); });
+    on(btn.back, 'click', function () { var n = stepFrom(tour - 1, -1); return n < 0 ? undefined : showStep(n); });
     on(btn.skip, 'click', closeBubble);
     on(btn.close, 'click', closeBubble);
     on(q('.guide-text'), 'click', function () { if (finishTyping) finishTyping(); });
@@ -582,7 +634,10 @@
         var el = document.getElementById(id);
         if (el) watcher.observe(el, { attributes: true, attributeFilter: ['class', 'hidden'] });
       });
-      cleanups.push(function () { watcher.disconnect(); });
+      // the view switch and the globe's progress, written on <body> by the page
+      var views = new MutationObserver(safe(maybeGlobeTour));
+      views.observe(document.body, { attributes: true, attributeFilter: ['data-view', 'data-globe', 'data-trend'] });
+      cleanups.push(function () { watcher.disconnect(); views.disconnect(); });
     }
 
     document.body.appendChild(spot);

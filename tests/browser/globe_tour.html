@@ -1,0 +1,110 @@
+<!doctype html><meta charset="utf-8"><title>harness: globe tutorial</title>
+<iframe id="f" src="/" width="1280" height="900"></iframe>
+<script>
+// The Globe-view tutorial: starts the first time Globe view is opened (the Classic one has been seen),
+// every step highlights its element, the replay button replays the tutorial of the view that is shown,
+// and a step whose element is missing is skipped quietly. See tests/test_page_browser.py.
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const out = {errors: [], steps: []};
+const report = () => fetch('/__harness/result/globe_tour', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(out)});
+(async () => {
+  try {
+    try { localStorage.clear(); localStorage.setItem('estd.guide.tutorialSeen', '1'); } catch (e) {}
+    const f = document.getElementById('f');
+    if (!f.contentDocument || f.contentDocument.readyState !== 'complete' || f.contentWindow.location.href === 'about:blank')
+      await new Promise(r => f.addEventListener('load', r, {once: true}));
+    // load the page again, now that the storage says the Classic tutorial has been seen
+    try { localStorage.clear(); localStorage.setItem('estd.guide.tutorialSeen', '1'); } catch (e) {}
+    const again = new Promise(r => f.addEventListener('load', r, {once: true}));
+    f.contentWindow.location.reload();
+    await again;
+    const d = f.contentDocument, w = f.contentWindow, $ = id => d.getElementById(id);
+    w.addEventListener('error', e => out.errors.push(String(e.message)));
+    w.addEventListener('unhandledrejection', e => out.errors.push('rejection: ' + e.reason));
+    for (const k of ['error', 'warn']) {
+      const orig = w.console[k];
+      w.console[k] = (...a) => { out.errors.push(`console.${k}: ${a.join(' ')}`); orig.apply(w.console, a); };
+    }
+    const waitFor = async (fn, ms = 20000) => { for (let t = 0; t < ms && !fn(); t += 50) await sleep(50); return !!fn(); };
+    const open = () => !!$('guideBubble') && !$('guideBubble').hidden && !$('guide').hidden;
+    const text = sel => (d.querySelector(sel) || {textContent: ''}).textContent;
+    const settled = () => waitFor(() => $('guide').dataset.state !== 'talking');
+    const rect = sel => {
+      let r = null;
+      d.querySelectorAll(sel).forEach(el => {
+        const b = el.getBoundingClientRect();
+        if (b.width < 1 || b.height < 1) return;
+        r = r ? {left: Math.min(r.left, b.left), top: Math.min(r.top, b.top), right: Math.max(r.right, b.right), bottom: Math.max(r.bottom, b.bottom)}
+              : {left: b.left, top: b.top, right: b.right, bottom: b.bottom};
+      });
+      return r;
+    };
+    const act = name => d.querySelector(`#guideBubble [data-act="${name}"]`);
+    // walk the tutorial that is open, pressing Next until it closes
+    const walk = async (list) => {
+      const seen = [];
+      for (let n = 0; n < 12 && open(); n++) {
+        await settled(); await sleep(800);               // typing done, globe and spotlight settled
+        const i = parseInt(text('.guide-progress').replace('Step ', ''), 10) - 1, step = list[i] || {};
+        const want = rect(step.target || '#none') || (step.fallback ? rect(step.fallback) : null);
+        const s = $('guideSpot'), px = k => parseFloat(s.style[k]);
+        const fox = $('guideAvatar').getBoundingClientRect(), bub = $('guideBubble').getBoundingClientRect();
+        seen.push({id: step.id, progress: text('.guide-progress'), spoken: text('.guide-sr'), typed: text('.guide-typed'),
+                   usedTarget: !!rect(step.target || '#none'), spotShown: !s.hidden,
+                   spotOnTarget: !!want && Math.abs(px('left') + 6 - want.left) <= 3 && Math.abs(px('top') + 6 - want.top) <= 3 &&
+                                 Math.abs(px('width') - 12 - (want.right - want.left)) <= 3,
+                   targetInView: !!want && want.bottom > 0 && want.top < w.innerHeight,
+                   bubbleInWindow: bub.left >= 0 && bub.top >= 0 && bub.right <= d.documentElement.clientWidth + 1 && bub.bottom <= w.innerHeight + 1,
+                   foxOverBubble: !(fox.right <= bub.left || fox.left >= bub.right || fox.bottom <= bub.top || fox.top >= bub.bottom),
+                   next: act('next').textContent, state: $('guide').dataset.state});
+        act('next').click();
+        await sleep(150);
+      }
+      return seen;
+    };
+
+    await waitFor(() => d.querySelectorAll('#demos button').length && $('viewToggle') && $('guideReplay'));
+    await sleep(500);
+    out.classicFirst = {open: open(), view: d.body.dataset.view};       // the Classic tutorial was seen: nothing starts
+
+    d.querySelector('#viewToggle [data-view="globe"]').click();
+    await waitFor(() => ['ready', 'failed'].includes(w.EstdGlobe.status), 60000);
+    out.status = w.EstdGlobe.status;
+    const globeSteps = w.eval('GUIDE_STEPS_GLOBE'), classicSteps = w.eval('GUIDE_STEPS');
+    if (out.status === 'ready') {
+      out.started = await waitFor(open, 30000);
+      out.firstFlag = w.localStorage.getItem('estd.guide.globeTutorialSeen');
+      out.steps = await walk(globeSteps);
+      await sleep(300);
+      out.afterFinish = {open: open(), spotHidden: $('guideSpot').hidden, view: d.body.dataset.view,
+                         classicFlag: w.localStorage.getItem('estd.guide.tutorialSeen')};
+
+      // replay in Globe view: the globe tutorial again
+      $('guideReplay').click(); await sleep(200); await settled();
+      out.replayGlobe = {progress: text('.guide-progress'), spoken: text('.guide-sr')};
+
+      // leaving Globe view ends it; replay in Classic view: the Classic tutorial
+      d.querySelector('#viewToggle [data-view="classic"]').click(); await sleep(300);
+      out.leftGlobe = {open: open()};
+      $('guideReplay').click(); await sleep(200); await settled();
+      out.replayClassic = {progress: text('.guide-progress'), spoken: text('.guide-sr')};
+      act('skip').click(); await sleep(200);
+
+      // back in Globe view (second visit: no tutorial by itself); a step whose element is gone is skipped
+      d.querySelector('#viewToggle [data-view="globe"]').click(); await sleep(1200);
+      out.secondVisit = {open: open()};
+      $('trendLegend').remove();
+      $('guideReplay').click(); await sleep(200);
+      out.withoutLegend = (await walk(globeSteps)).map(s => s.id);
+    } else {
+      // no WebGL here: the page is back in Classic view, and replay gives the Classic tutorial
+      await sleep(500);
+      $('guideReplay').click(); await sleep(200); await settled();
+      out.replayClassic = {progress: text('.guide-progress'), spoken: text('.guide-sr')};
+      out.view = d.body.dataset.view;
+    }
+    out.counts = {globe: globeSteps.length, classic: classicSteps.length};
+  } catch (e) { out.errors.push('harness: ' + (e && e.stack || e)); }
+  await report();
+})();
+</script>

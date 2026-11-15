@@ -182,10 +182,11 @@ def test_first_visit_starts_the_tutorial_and_every_step_highlights_its_element(g
     name, steps, _ = _guide_config()
     out = guide_run
     assert out["name"] == name and out["firstVisitStarted"]
-    assert [s["id"] for s in out["steps"]] == [s["id"] for s in steps] and len(steps) == 7
+    assert [s["id"] for s in out["steps"]] == [s["id"] for s in steps]
+    n = len(steps)
     for i, (seen, step) in enumerate(zip(out["steps"], steps)):
         assert seen["spoken"] == seen["typed"] == _said(step["text"], name), seen   # typed out completely
-        assert seen["progress"] == f"Step {i + 1} of 7"
+        assert seen["progress"] == f"Step {i + 1} of {n}"
         assert seen["targetVisible"] and seen["spotShown"] and seen["spotOnTarget"] and seen["targetInView"], seen
         assert seen["stateAtStart"] == "talking" and seen["typedAtStart"] != seen["typed"], seen   # typewriter
         assert seen["poseAtStart"] == "talking" and seen["poseAfter"] == "pointing", seen         # the pictures swap with the state
@@ -195,7 +196,7 @@ def test_first_visit_starts_the_tutorial_and_every_step_highlights_its_element(g
         assert seen["flip"] == ("matrix(-1, 0, 0, 1, 0, 0)" if seen["facing"] == "left" else "none"), seen
         assert seen["foxInWindow"] and seen["bubbleInWindow"] and not seen["foxOverBubble"], seen
         assert seen["skipShown"] and seen["backShown"] == (i > 0) and seen["focusOnNext"], seen
-        assert seen["next"] == ("Finish" if i == 6 else "Next")
+        assert seen["next"] == ("Finish" if i == n - 1 else "Next")
     assert name in out["steps"][0]["spoken"]                                # introduces itself by name
     assert not any(seen["bubbleCoversTarget"] for seen in out["steps"])     # never on top of what it explains
     after = out["afterFinish"]
@@ -220,13 +221,13 @@ def test_header_controls_are_named_after_the_guide(guide_run):
 
 
 def test_second_visit_has_no_tutorial_and_the_toggle_is_remembered(guide_run):
-    name, _, _ = _guide_config()
+    name, steps, _ = _guide_config()
     out = guide_run
     assert out["secondVisit"] == {"bubbleOpen": False, "guideShown": True, "toggle": f"{name}: on"}
     assert out["off"] == {"toggle": f"{name}: off", "pressed": "false", "guideShown": False, "stored": "off"}
     assert out["offReload"] == {"toggle": f"{name}: off", "guideShown": False, "bubbleOpen": False,
                                 "tipStillAnswers": True, "hiddenAgainAfterClose": True}
-    assert out["replay"] == {"open": True, "progress": "Step 1 of 7", "toggle": f"{name}: on",
+    assert out["replay"] == {"open": True, "progress": f"Step 1 of {len(steps)}", "toggle": f"{name}: on",
                              "stored": "on", "skipped": True}
 
 
@@ -251,7 +252,7 @@ def test_narrow_window_collapses_him_to_his_head(guide_run):
     assert narrow["width"] <= 400 and narrow["tucked"] == "true" and not narrow["bubbleOpen"]
     assert narrow["avatarWidth"] <= 90 and narrow["avatarHeight"] < narrow["avatarWidth"]       # just his head
     assert narrow["wideAgain"]["tucked"] == "false" and narrow["wideAgain"]["avatarWidth"] >= 100  # back in a wide window
-    assert len(narrow["steps"]) == 7
+    assert len(narrow["steps"]) == len(_guide_config()[1])
     for seen in narrow["steps"]:
         assert seen["spotShown"] and seen["spotOnTarget"] and seen["targetInView"], seen
         assert seen["foxInWindow"] and seen["bubbleInWindow"], seen
@@ -315,6 +316,39 @@ def test_reduced_motion_means_no_animation_and_instant_text(site, tmp_path):
 
 
 # ---------------------------------------------------------------- the optional globe view
+
+def test_globe_view_has_its_own_tutorial_and_replay_follows_the_view(site, tmp_path):
+    """The first time Globe view is opened its own tutorial starts (the Classic one was seen already);
+    every step highlights its element; replay gives the tutorial of the view that is shown; a step whose
+    element is missing is skipped; nothing reaches the console. Without WebGL the page is back in
+    Classic view and replay gives the Classic tutorial."""
+    from test_guide import GLOBE_STEPS, NAME, STEPS
+    out = site("globe_tour", tmp_path / "profile",
+               extra=("--enable-unsafe-swiftshader", "--use-angle=swiftshader", "--force-prefers-reduced-motion"))
+    assert out["errors"] == [], out["errors"]
+    assert out["counts"] == {"globe": len(GLOBE_STEPS), "classic": len(STEPS)}
+    assert out["classicFirst"]["open"] is False
+    classic_first = {"progress": f"Step 1 of {len(STEPS)}", "spoken": _said(STEPS[0]["text"], NAME)}
+    if out["status"] != "ready":                                        # no WebGL on this machine
+        assert out["view"] == "classic" and out["replayClassic"] == classic_first, out
+        return
+    n = len(GLOBE_STEPS)
+    assert out["started"] and out["firstFlag"] == "1"
+    assert [s["id"] for s in out["steps"]] == [s["id"] for s in GLOBE_STEPS], out["steps"]
+    for i, (seen, step) in enumerate(zip(out["steps"], GLOBE_STEPS)):
+        assert seen["spoken"] == seen["typed"] == _said(step["text"], NAME), seen
+        assert seen["progress"] == f"Step {i + 1} of {n}", seen
+        assert seen["spotShown"] and seen["spotOnTarget"] and seen["targetInView"], seen
+        assert seen["bubbleInWindow"] and not seen["foxOverBubble"], seen
+        assert seen["next"] == ("Finish" if i == n - 1 else "Next") and seen["state"] == "pointing", seen
+        assert seen["usedTarget"], seen                                 # the real element, not the fallback
+    after = out["afterFinish"]
+    assert not after["open"] and after["spotHidden"] and after["view"] == "globe" and after["classicFlag"] == "1"
+    assert out["replayGlobe"] == {"progress": f"Step 1 of {n}", "spoken": _said(GLOBE_STEPS[0]["text"], NAME)}
+    assert out["leftGlobe"] == {"open": False}                           # leaving Globe view ends its tutorial
+    assert out["replayClassic"] == classic_first
+    assert out["secondVisit"] == {"open": False}                         # only the first time by itself
+    assert out["withoutLegend"] == [s["id"] for s in GLOBE_STEPS if s["id"] != "legend"]
 
 def test_globe_without_a_token_runs_offline_and_its_regions_run_the_demo_buttons(site, tmp_path):
     """Classic view is the default and does not load Cesium. With no token the globe is in offline

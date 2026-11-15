@@ -11,49 +11,96 @@
 #viewNote { flex-basis: 100%; margin: 0; font-size: .875rem; color: var(--orange-ink, #A23900); font-weight: 600; }
 #viewNote[hidden], #globePanel[hidden], #globeTip[hidden], #globeNote[hidden], #globeStatus[hidden] { display: none !important; }
 
-.globe-panel { background: #02060f; border-color: #12324f; color: #cfefff; padding: 0; overflow: hidden; }
-.globe-stage { position: relative; height: min(62vh, 560px); min-height: 320px; }
+/* the dark stage: the one deep teal-navy surface on the cream page */
+.globe-panel { background: var(--stage, #0B2530); border: 1px solid #173E4D; border-radius: 20px; color: #E6F8FA; padding: 16px;
+               overflow: hidden; box-shadow: 0 16px 40px -8px rgba(11, 37, 48, .35); }
+.globe-stage { position: relative; height: min(64vh, 580px); min-height: 440px; border-radius: 14px; overflow: hidden;
+               background: linear-gradient(#081E28, #041117); box-shadow: inset 0 0 40px rgba(0, 0, 0, .45); }
 #globeBox { position: absolute; inset: 0; }
 #globeStatus {
   position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
-  margin: 0; font-size: .95rem; color: #7fdcff; letter-spacing: .04em;
+  margin: 0; font-size: 1rem; font-weight: 600; color: #9EEFFF; letter-spacing: .02em;
 }
 #globeTip {
   position: absolute; z-index: 5; pointer-events: none; max-width: 280px;
-  background: rgba(2, 14, 30, .92); border: 1px solid #4fd8ff; border-radius: 6px;
-  box-shadow: 0 0 12px rgba(79, 216, 255, .35); padding: 6px 10px; font-size: .82rem; color: #e6f8ff;
+  background: var(--cream, #FFF8F0); color: var(--ink, #3A2218); border: 1px solid var(--border, #EAD9BC); border-radius: 12px;
+  box-shadow: 0 0 0 2px var(--cyan, #3CE0D0), 0 8px 24px rgba(0, 0, 0, .35); padding: 8px 12px; font-size: .875rem;
 }
-#globeTip strong { display: block; margin-bottom: 2px; }
-#globeTip span { color: #9fe6ff; }
-.globe-foot { margin: 0; padding: 8px 14px; font-size: .82rem; color: #9fc9e0; border-top: 1px solid #12324f; }
-#globeNote { margin-left: 8px; padding: 1px 8px; border-radius: 10px; background: #3a2a00; color: #ffe08a; }
-/* Cesium's own credit bar: dim, readable on the dark globe */
-.globe-panel .cesium-widget-credits { opacity: .7; }
+#globeTip strong { display: block; margin-bottom: 2px; font-size: .9375rem; }
+#globeTip span { color: var(--ink-2, #6B4A3A); }
+.globe-foot { margin: 0; padding: 12px 4px 0; font-size: .875rem; color: #BFE3EA; }
+#globeNote { display: inline-block; margin-left: 8px; padding: 2px 10px; border-radius: 999px; background: #113A4A; color: #9EEFFF;
+             border: 1px solid rgba(31, 138, 154, .4); font-weight: 600; }
+/* Cesium's own credit bar: kept visible, readable on the dark globe */
+.globe-panel .cesium-widget-credits { opacity: .8; }
+/* an unseen box that globe.js keeps over the cyan region boxes, for the guide to point at */
+#globeRegions { position: absolute; pointer-events: none; }
 
-/* trend-map panel (heatmap from data/maps/), top-left of the globe */
+/* trend-map controls (top of the stage): switch, variable chips, experimental toggle, opacity */
 .trend-panel {
-  position: absolute; z-index: 4; top: 10px; left: 10px; width: 250px; max-height: calc(100% - 20px);
-  overflow-y: auto; background: rgba(2, 14, 30, .9); border: 1px solid #12324f; border-radius: 6px;
-  padding: 8px 10px; font-size: .78rem; color: #cfefff;
+  position: absolute; z-index: 4; top: 12px; left: 12px; right: 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px;
+  font-size: .875rem; color: #E6F8FA; pointer-events: none;
 }
-.trend-panel[hidden], .trend-panel [hidden] { display: none !important; }
-.trend-panel label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
-.trend-switch { font-weight: 600; font-size: .85rem; }
-.trend-list { margin: 6px 0; display: grid; gap: 2px; }
-.trend-exp-toggle { color: #9fc9e0; margin-bottom: 4px; }
-.trend-opacity input { flex: 1; }
-.trend-caveat {
-  margin: 6px 0; padding: 6px 8px; border-left: 3px solid #ffb703; background: #3a2a00; color: #ffe08a;
+.trend-panel > * { pointer-events: auto; }
+.trend-panel[hidden], .trend-panel [hidden], .trend-card[hidden], .trend-card [hidden] { display: none !important; }
+.trend-panel label { display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: .875rem; font-weight: 600; }
+.trend-switch { padding: 6px 14px 6px 10px; min-height: 40px; border-radius: 999px; background: rgba(6, 24, 32, .9);
+                border: 1px solid rgba(255, 255, 255, .14); font-weight: 800; }
+/* the checkbox drawn as a switch */
+.trend-switch input { appearance: none; -webkit-appearance: none; width: 36px; height: 20px; border-radius: 999px; margin: 0;
+                      background: #4A5F68; position: relative; cursor: pointer; transition: background-color .15s; flex: none; }
+.trend-switch input::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%;
+                             background: #fff; transition: transform .15s; }
+.trend-switch input:checked { background: var(--teal, #1F8A9A); }
+.trend-switch input:checked::after { transform: translateX(16px); }
+.trend-body { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; flex: 1 1 300px; min-width: 0; pointer-events: none; }
+.trend-body > * { pointer-events: auto; }
+.trend-list { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px; border-radius: 22px; background: rgba(6, 24, 32, .9);
+              border: 1px solid rgba(255, 255, 255, .14); }
+/* variable chips: radio buttons drawn as pills */
+.trend-var { position: relative; padding: 6px 14px; min-height: 32px; border-radius: 999px; color: #9EEFFF; }
+.trend-var:hover { background: rgba(255, 255, 255, .1); }
+.trend-var input { position: absolute; opacity: 0; width: 100%; height: 100%; inset: 0; margin: 0; cursor: pointer; }
+.trend-var:has(input:checked) { background: var(--teal-strong, #176E7B); color: #fff; font-weight: 800; }
+.trend-var:has(input:focus-visible) { outline: 3px solid var(--cyan, #3CE0D0); outline-offset: 2px; }
+.trend-exp-toggle, .trend-opacity { padding: 4px 12px; min-height: 32px; border-radius: 999px; background: rgba(6, 24, 32, .9);
+                                    border: 1px solid rgba(255, 255, 255, .14); color: #BFE3EA; }
+.trend-exp-toggle input { width: 18px; height: 18px; accent-color: var(--teal, #1F8A9A); }
+.trend-opacity input { width: 96px; accent-color: var(--cyan, #3CE0D0); }
+.trend-panel input:focus-visible { outline: 3px solid var(--cyan, #3CE0D0); outline-offset: 2px; }
+
+/* legend card (bottom-right of the stage): white glass on the dark globe */
+.trend-card {
+  position: absolute; z-index: 4; right: 12px; bottom: 12px; width: min(320px, calc(100% - 24px)); max-height: calc(100% - 130px);
+  overflow-y: auto; padding: 14px 16px; border-radius: 16px; background: rgba(255, 255, 255, .96); color: var(--ink, #3A2218);
+  border: 1px solid var(--border, #EAD9BC); box-shadow: 0 12px 32px -4px rgba(0, 0, 0, .4); font-size: .875rem; line-height: 1.4;
 }
-.trend-legend { margin-top: 6px; }
-.trend-legend-title { font-weight: 600; margin-bottom: 3px; }
-.trend-bar { height: 10px; border-radius: 2px; border: 1px solid rgba(255, 255, 255, .25); }
-.trend-ticks { display: flex; justify-content: space-between; font-variant-numeric: tabular-nums; }
-.trend-units { color: #9fc9e0; }
-.trend-faded, .trend-desc, .trend-method { margin: 6px 0 0; }
-.trend-method { color: #9fc9e0; }
+.trend-card p { margin: 0; }
+.trend-card .trend-caveat { margin-bottom: 10px; padding: 8px 10px; border-left: 4px solid var(--orange, #E0652F); border-radius: 6px;
+                            background: #FFEAE1; color: #5C2100; font-weight: 600; }
+.trend-legend-title { font-weight: 800; color: var(--ink-2, #6B4A3A); margin-bottom: 6px; }
+.trend-bar { height: 12px; border-radius: 999px; box-shadow: inset 0 1px 2px rgba(0, 0, 0, .25); }
+.trend-ticks { display: flex; justify-content: space-between; margin-top: 4px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.trend-units { color: var(--ink-2, #6B4A3A); }
+.trend-card .trend-faded { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border, #EAD9BC); color: var(--ink-2, #6B4A3A); }
+.trend-card .trend-desc { margin-top: 8px; }
+.trend-card .trend-method { margin-top: 8px; color: var(--ink-2, #6B4A3A); }
 .trend-info {
-  width: 18px; height: 18px; padding: 0; border-radius: 50%; border: 1px solid #4fd8ff;
-  background: transparent; color: #4fd8ff; font: italic 600 .75rem Georgia, serif; cursor: pointer;
+  width: 24px; height: 24px; padding: 0; border-radius: 50%; border: 1.5px solid var(--teal-strong, #176E7B); vertical-align: middle;
+  background: #fff; color: var(--teal-strong, #176E7B); font: italic 800 .875rem Georgia, serif; cursor: pointer;
 }
-.trend-panel input:focus-visible, .trend-info:focus-visible { outline: 2px solid #ffb703; outline-offset: 2px; }
+.trend-info:hover { background: var(--teal-strong, #176E7B); color: #fff; }
+
+/* small screens: the controls and the legend sit under the globe instead of on top of it */
+@media (max-width: 767px) {
+  .globe-panel { padding: 12px; }
+  .globe-stage { height: auto; min-height: 0; overflow: visible; background: none; box-shadow: none; display: flex; flex-direction: column; gap: 12px; }
+  #globeBox { position: relative; inset: auto; height: 340px; border-radius: 14px; overflow: hidden; order: 1; }
+  #globeStatus { position: static; min-height: 60px; order: 0; }
+  .trend-panel { position: static; order: 2; }
+  .trend-card { position: static; order: 3; width: auto; max-height: none; }
+  .trend-opacity input { width: 120px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .trend-switch input, .trend-switch input::after { transition: none; }
+}

@@ -65,6 +65,46 @@ const GUIDE_STEPS = [
   }
 ];
 
+// The Globe-view tutorial: a separate list, shown the first time Globe view is opened and replayed by
+// the replay button while Globe view is active. Same fields as above, plus:
+//   globeAction  name of a function of the globe (web/globe/globe.js) to call first, e.g. to turn the
+//                globe so that the regions are in sight
+// A step whose target is not in the page (the trend maps did not load, say) is skipped quietly.
+const GUIDE_STEPS_GLOBE = [
+  {
+    "id": "globe",
+    "target": "#globeBox",
+    "text": "This is Earth. Drag to spin it and scroll to zoom."
+  },
+  {
+    "id": "regions",
+    "target": "#globeRegions",
+    "fallback": "#globeBox",
+    "globeAction": "showRegions",
+    "text": "The cyan boxes are our demo regions. Click one to see its trend below."
+  },
+  {
+    "id": "switch",
+    "target": "#trendSwitch",
+    "text": "Turn the trend map on or off here."
+  },
+  {
+    "id": "variables",
+    "target": "#trendList",
+    "text": "Pick a variable here. Temperature is the clearest one."
+  },
+  {
+    "id": "legend",
+    "target": "#trendLegend",
+    "text": "Warm colours mean an increase per decade, cool colours a decrease. Faded cells are not statistically significant, which is not the same as no trend."
+  },
+  {
+    "id": "scenarios",
+    "target": "#demos",
+    "text": "Click a scenario to load its chart and what it means for solar, wind, hydro or farming."
+  }
+];
+
 // The "?" buttons: <button class="tip" data-tip="KEY"> in web/index.html.
 const GUIDE_TIPS = {
   "pvalue": {

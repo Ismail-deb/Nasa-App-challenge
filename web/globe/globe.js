@@ -22,15 +22,18 @@
   var SPIN_RAD_PER_S = 0.03;          // slow idle rotation
   var OFFLINE_NOTE = 'Globe running in offline mode, no terrain';
   var FAILED_NOTE = 'The globe could not start here (offline mode); showing Classic view.';
-  var CYAN = '#4fd8ff';
+  var CYAN = '#3CE0D0';                // the design's stage glow
+  var INK = '#3A2218', CREAM = '#FBF3E4';   // region label chips: ink on cream
 
   // public state, read by tests/browser/globe.html (and handy in the browser's dev tools)
   var state = window.EstdGlobe = {
     view: 'classic', status: 'idle', mode: null, note: '', regions: [],
-    chooseMode: chooseMode, selectPreset: null
+    chooseMode: chooseMode, selectPreset: null, showRegions: null
   };
 
   function $(id) { return document.getElementById(id); }
+  // progress written on <body> (data-globe, data-trend) for the stylesheet and the optional guide
+  function flag(name, value) { try { document.body.dataset[name] = value; } catch (e) { /* not essential */ } }
   function reduced() {
     try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { return false; }
   }
@@ -109,6 +112,7 @@
     panel.innerHTML =
       '<div class="globe-stage">' +
         '<div id="globeBox"></div>' +
+        '<div id="globeRegions" aria-hidden="true"></div>' +
         '<div id="globeTip" role="tooltip" hidden></div>' +
         '<p id="globeStatus">Loading the globe&hellip;</p>' +
       '</div>' +
@@ -150,6 +154,7 @@
   // the globe cannot run at all: back to Classic view, for good, with a note in the header
   function fail() {
     state.status = 'failed';
+    flag('globe', 'failed');
     state.mode = 'offline';
     state.note = FAILED_NOTE;
     ui.note.textContent = FAILED_NOTE;
@@ -216,7 +221,7 @@
       infoBox: false, selectionIndicator: false, skyBox: false, shouldAnimate: false
     });
     var scene = v.scene;
-    scene.backgroundColor = C.Color.fromCssColorString('#02060f');
+    scene.backgroundColor = C.Color.fromCssColorString('#0B2530');
     if (scene.sun) scene.sun.show = false;
     if (scene.moon) scene.moon.show = false;
     scene.globe.baseColor = C.Color.fromCssColorString('#061428');
@@ -228,15 +233,17 @@
       scene.skyAtmosphere.brightnessShift = -0.25;
     }
     v.cesiumWidget.screenSpaceEventHandler.removeInputAction(C.ScreenSpaceEventType.LEFT_DOUBLE_CLICK);
-    scene.camera.setView({destination: C.Cartesian3.fromDegrees(-98, 39.5, 17000000)});
+    scene.camera.setView({destination: C.Cartesian3.fromDegrees(HOME.lon, HOME.lat, HOME.height)});
 
     if (mode === 'terrain') loadTerrain(C, v); else showOfflineNote();
     addRegions(C, v, presets, lensList);
     setupSpin(C, v);
     setupPointer(C, v);
+    setupRegionsBox(C, v, presets);
     setupTrendMaps(C, v);
     v.useDefaultRenderLoop = state.view === 'globe';
     state.status = 'ready';
+    flag('globe', 'ready');
   }
 
   function goOffline(C, v) {
@@ -280,10 +287,9 @@
         position: C.Cartesian3.fromDegrees((w + e) / 2, (s + n) / 2, BOX_HEIGHT),
         rectangle: {coordinates: C.Rectangle.fromDegrees(w, s, e, n), height: BOX_HEIGHT, material: info.fill},
         label: {
-          text: shortName(p.name), font: '600 15px system-ui, sans-serif',
-          fillColor: C.Color.WHITE, outlineColor: C.Color.fromCssColorString('#02060f'), outlineWidth: 3,
-          style: C.LabelStyle.FILL_AND_OUTLINE, showBackground: true,
-          backgroundColor: C.Color.fromCssColorString('#02060f').withAlpha(0.55),
+          text: shortName(p.name), font: '700 15px "Nunito Sans", system-ui, sans-serif',
+          fillColor: C.Color.fromCssColorString(INK), style: C.LabelStyle.FILL, showBackground: true,
+          backgroundColor: C.Color.fromCssColorString(CREAM), backgroundPadding: new C.Cartesian2(10, 6),
           verticalOrigin: C.VerticalOrigin.BOTTOM, pixelOffset: new C.Cartesian2(0, -6),
           disableDepthTestDistance: Number.POSITIVE_INFINITY
         }
@@ -362,6 +368,43 @@
 
   function stopSpin() { globe.spinning = false; }
 
+  // #globeRegions: an unseen element kept over the cyan region boxes as they move on screen, so that the
+  // guide can point at them. It has no size while any box is out of sight (behind the globe, off screen).
+  // state.showRegions() turns the globe back to its first view, where all boxes are in sight.
+  var HOME = {lon: -98, lat: 39.5, height: 17000000};       // the first view: over the middle of the US
+  function setupRegionsBox(C, v, presets) {
+    var box = $('globeRegions'), scene = v.scene;
+    var project = C.SceneTransforms.worldToWindowCoordinates || C.SceneTransforms.wgs84ToWindowCoordinates;
+    var corners = [];
+    presets.forEach(function (p) {
+      var b = p.bbox;
+      [[b[0], b[1]], [b[2], b[1]], [b[2], b[3]], [b[0], b[3]]].forEach(function (c) {
+        corners.push(C.Cartesian3.fromDegrees(c[0], c[1], BOX_HEIGHT));
+      });
+    });
+    function hide() { box.style.width = box.style.height = '0px'; }
+    scene.postRender.addEventListener(function () {
+      if (!box || !project || !corners.length) return;
+      var occluder = new C.EllipsoidalOccluder(scene.globe.ellipsoid, scene.camera.positionWC);
+      var w = scene.canvas.clientWidth, h = scene.canvas.clientHeight;
+      var x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+      for (var i = 0; i < corners.length; i++) {
+        var at = occluder.isPointVisible(corners[i]) ? project(scene, corners[i]) : null;
+        if (!at || at.x < 0 || at.y < 0 || at.x > w || at.y > h) { hide(); return; }
+        x0 = Math.min(x0, at.x); y0 = Math.min(y0, at.y); x1 = Math.max(x1, at.x); y1 = Math.max(y1, at.y);
+      }
+      box.style.left = (ui.box.offsetLeft + x0) + 'px';
+      box.style.top = (ui.box.offsetTop + y0) + 'px';
+      box.style.width = (x1 - x0) + 'px';
+      box.style.height = (y1 - y0) + 'px';
+    });
+    state.showRegions = function () {
+      stopSpin();
+      v.camera.cancelFlight();
+      v.camera.setView({destination: C.Cartesian3.fromDegrees(HOME.lon, HOME.lat, HOME.height)});
+    };
+  }
+
   function setupSpin(C, v) {
     globe.spinning = !reduced();
     ['pointerdown', 'wheel', 'touchstart', 'keydown'].forEach(function (type) {
@@ -434,7 +477,9 @@
 
   function trendNote(text) {
     state.trend.status = 'failed';
+    flag('trend', 'failed');
     if (ui.trendPanel) ui.trendPanel.hidden = true;
+    if (ui.trendLegend) ui.trendLegend.hidden = true;
     ui.globeNote.textContent = ui.globeNote.hidden ? text : ui.globeNote.textContent + ' \u00b7 ' + text;
     ui.globeNote.hidden = false;
   }
@@ -459,6 +504,7 @@
       var first = stable.filter(function (x) { return x.key === DEFAULT_MAP; })[0] || stable[0] || trend.variables[0];
       selectMap(C, v, first.key);
       trend.status = 'ready';
+      flag('trend', 'ready');
     }).catch(function () { trendNote(MAPS_NOTE); });
   }
 
@@ -469,6 +515,7 @@
     p.setAttribute('aria-label', 'Trend map');
 
     var head = el('label', 'trend-switch');
+    head.id = 'trendSwitch';
     var on = el('input');
     on.type = 'checkbox'; on.id = 'trendOn'; on.checked = trend.show;
     head.appendChild(on);
@@ -479,6 +526,7 @@
     p.appendChild(body);
 
     var list = el('div', 'trend-list');
+    list.id = 'trendList';
     list.setAttribute('role', 'radiogroup');
     list.setAttribute('aria-label', 'Variable');
     trend.variables.forEach(function (x) {
@@ -508,10 +556,15 @@
     opRow.appendChild(op);
     body.appendChild(opRow);
 
+    // the legend card (bottom-right of the stage): caveat, colour bar, description, method
+    var card = ui.trendLegend = el('div', 'trend-card');
+    card.id = 'trendLegend';
+    card.setAttribute('role', 'region');
+    card.setAttribute('aria-label', 'Trend map legend');
     var caveat = el('p', 'trend-caveat');
     caveat.setAttribute('role', 'note');
     caveat.hidden = true;
-    body.appendChild(caveat);
+    card.appendChild(caveat);
 
     var legend = el('div', 'trend-legend');
     legend.appendChild(el('div', 'trend-legend-title', 'Change per decade'));
@@ -524,7 +577,7 @@
     var units = el('div', 'trend-units');
     legend.appendChild(units);
     legend.appendChild(el('p', 'trend-faded', FADED_TEXT));
-    body.appendChild(legend);
+    card.appendChild(legend);
 
     var desc = el('p', 'trend-desc');
     var info = el('button', 'trend-info', 'i');
@@ -536,17 +589,17 @@
     desc.appendChild(descText);
     desc.appendChild(document.createTextNode(' '));
     desc.appendChild(info);
-    body.appendChild(desc);
+    card.appendChild(desc);
     var method = el('p', 'trend-method');
     method.hidden = true;
-    body.appendChild(method);
+    card.appendChild(method);
 
     ui.trend = {on: on, body: body, list: list, exp: exp, op: op, caveat: caveat, bar: bar,
                 tMin: tMin, tMax: tMax, units: units, desc: descText, info: info, method: method};
 
     on.addEventListener('change', function () {
       trend.show = on.checked;
-      body.hidden = !on.checked;
+      body.hidden = card.hidden = !on.checked;
       if (trend.layer) trend.layer.show = trend.show;
     });
     op.addEventListener('input', function () {
@@ -563,6 +616,7 @@
     });
 
     ui.box.parentNode.appendChild(p);
+    ui.box.parentNode.appendChild(card);
   }
 
   function setExperimental(C, v, shown) {

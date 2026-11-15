@@ -102,7 +102,7 @@ def test_a_failed_map_load_leaves_the_globe_working():
     assert "quiet(layer.errorEvent);" in TREND_JS
     assert not re.search(r"console\.\w+\(", GLOBE_JS)
     # the regions are set up before, and independently of, the trend maps
-    assert GLOBE_JS.index("setupPointer(C, v);\n    setupTrendMaps(C, v);") > 0
+    assert GLOBE_JS.index("setupPointer(C, v);") < GLOBE_JS.index("    setupTrendMaps(C, v);")
 
 
 # ---------------------------------------------------------------- the /maps/ route
