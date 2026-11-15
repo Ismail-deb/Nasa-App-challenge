@@ -99,6 +99,11 @@ const GUIDE_STEPS_GLOBE = [
     "text": "The cyan boxes are our demo regions. Click one to see its trend below."
   },
   {
+    "id": "terrain",
+    "target": "#terrainHeight",
+    "text": "Drag this to stretch the mountains and see the terrain better."
+  },
+  {
     "id": "switch",
     "target": "#trendSwitch",
     "text": "Turn the trend map on or off here."
@@ -112,6 +117,18 @@ const GUIDE_STEPS_GLOBE = [
     "id": "legend",
     "target": "#trendLegend",
     "text": "Warm colours mean an increase per decade, cool colours a decrease. Faded cells are not statistically significant, which is not the same as no trend."
+  },
+  {
+    "id": "cell",
+    "target": "#globeCell",
+    "globeAction": "showUS",
+    "text": "Click any cell to see its exact change and p-value."
+  },
+  {
+    "id": "outline",
+    "target": "#globeOutline",
+    "globeAction": "showUS",
+    "text": "The thin cyan line is the outline of the contiguous US. Click it for a tilted view of the whole country."
   },
   {
     "id": "scenarios",

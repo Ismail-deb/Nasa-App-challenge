@@ -30,7 +30,11 @@ def test_globe_regions_come_from_the_presets_endpoint_only():
 def test_a_region_click_runs_the_demo_button():
     assert "document.querySelector('#demos button[data-id=\"' + p.id + '\"]')" in GLOBE_JS
     assert "button.click();" in GLOBE_JS
-    assert "if (info) state.selectPreset(info.preset.id);" in GLOBE_JS     # nothing else is clickable
+    # boxes first; then the US outline; then a map cell (also inside the region already chosen)
+    click = GLOBE_JS.split("handler.setInputAction(function (c) {")[1].split("C.ScreenSpaceEventType.LEFT_CLICK")[0]
+    assert "if (info && !cell) { state.selectPreset(info.preset.id); return; }" in click
+    assert click.index("selectPreset") < click.index("outlineAt(v, c.position)") < click.index("showCell(cell")
+    assert "var cell = (!info || info.preset.id === globe.current) ? cellAtScreen(C, v, c.position) : null;" in click
 
 
 # ---------------------------------------------------------------- token

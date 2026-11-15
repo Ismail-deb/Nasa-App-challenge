@@ -70,6 +70,7 @@ const report = () => fetch('/__harness/result/globe_tour', {method: 'POST', head
     d.querySelector('#viewToggle [data-view="globe"]').click();
     await waitFor(() => ['ready', 'failed'].includes(w.EstdGlobe.status), 60000);
     out.status = w.EstdGlobe.status;
+    out.mode = w.EstdGlobe.mode;
     const globeSteps = w.eval('GUIDE_STEPS_GLOBE'), classicSteps = w.eval('GUIDE_STEPS');
     if (out.status === 'ready') {
       out.started = await waitFor(open, 30000);

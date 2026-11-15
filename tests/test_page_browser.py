@@ -367,13 +367,16 @@ def test_globe_view_has_its_own_tutorial_and_replay_follows_the_view(site, tmp_p
         return
     n = len(GLOBE_STEPS)
     assert out["started"] and out["firstFlag"] == "1"
-    assert [s["id"] for s in out["steps"]] == [s["id"] for s in GLOBE_STEPS], out["steps"]
-    for i, (seen, step) in enumerate(zip(out["steps"], GLOBE_STEPS)):
+    # offline (no token here) there is no terrain slider, so its step is skipped quietly
+    shown = [s for s in GLOBE_STEPS if s["id"] != "terrain"] if out["mode"] == "offline" else GLOBE_STEPS
+    assert [s["id"] for s in out["steps"]] == [s["id"] for s in shown], out["steps"]
+    for seen, step in zip(out["steps"], shown):
+        i = GLOBE_STEPS.index(step)
         assert seen["spoken"] == seen["typed"] == _said(step["text"], NAME), seen
         assert seen["progress"] == f"Step {i + 1} of {n}", seen
         assert seen["spotShown"] and seen["spotOnTarget"] and seen["targetInView"], seen
         assert seen["bubbleInWindow"] and not seen["foxOverBubble"], seen
-        assert seen["next"] == ("Finish" if i == n - 1 else "Next") and seen["state"] == "pointing", seen
+        assert seen["next"] == ("Finish" if step is shown[-1] else "Next") and seen["state"] == "pointing", seen
         assert seen["usedTarget"], seen                                 # the real element, not the fallback
     after = out["afterFinish"]
     assert not after["open"] and after["spotHidden"] and after["view"] == "globe" and after["classicFlag"] == "1"
@@ -381,7 +384,7 @@ def test_globe_view_has_its_own_tutorial_and_replay_follows_the_view(site, tmp_p
     assert out["leftGlobe"] == {"open": False}                           # leaving Globe view ends its tutorial
     assert out["replayClassic"] == classic_first
     assert out["secondVisit"] == {"open": False}                         # only the first time by itself
-    assert out["withoutLegend"] == [s["id"] for s in GLOBE_STEPS if s["id"] != "legend"]
+    assert out["withoutLegend"] == [s["id"] for s in shown if s["id"] != "legend"]
 
 def test_globe_without_a_token_runs_offline_and_its_regions_run_the_demo_buttons(site, tmp_path):
     """Classic view is the default and does not load Cesium. With no token the globe is in offline
@@ -417,6 +420,23 @@ def test_globe_without_a_token_runs_offline_and_its_regions_run_the_demo_buttons
         assert e["key"] == "SoilMoi0_10cm_inst" and all(shown for _, shown in e["rows"]), e
         assert e["caveat"] and "artefacts" in e["caveat"], e
         assert t["back"] == {"key": "T2M", "caveat": False} and t["off"] == {"show": False}, t
+        # relief: offline, so no terrain switch or slider, only Top-down; the settings still persist
+        r = out["relief"]
+        assert not r["switchShown"] and not r["heightShown"] and r["topDown"], r
+        assert r["relief"] == {"terrain": False, "exaggeration": 1} and r["defaults"] == {"terrainOn": True, "exaggeration": 1.5}, r
+        assert r["collision"] and r["minZoom"] == 2000 and r["maxZoom"] == 25000000 and r["requestRenderMode"], r
+        assert r["saved"] == {"terrain": "off", "ex": "2.5", "read": {"terrainOn": False, "exaggeration": 2.5}, "offlineEx": 1}, r
+        assert r["clamped"] == 3, r
+        # the US outline is served and drawn; Central Valley's label only when zoomed in
+        assert out["outline"]["status"] == "ready" and out["outline"]["rings"] >= 1 and out["outline"]["entities"] == out["outline"]["rings"]
+        assert out["labels"] == {"southwest": "always", "great_plains": "always", "pacific_northwest": "always", "central_valley": "near"}
+        assert out["topDown"]["pitch"] <= -88, out["topDown"]
+        # a significant cell outside the boxes: decoded, and clicked on screen it opens the card; Esc / elsewhere close it
+        cell = out["cell"]
+        assert cell["decoded"]["significant"] and cell["masked"] is None and cell["outside"] is None, cell
+        assert cell["clicked"]["shown"] and "per decade" in cell["clicked"]["text"] and "(raw)" in cell["clicked"]["text"], cell
+        assert "FDR 10%" in cell["clicked"]["text"] and "Grid cell" in cell["clicked"]["text"], cell
+        assert cell["afterEscape"] is False and cell["clickElsewhere"] == {"before": True, "after": False}, cell
     c = out["classic"]
     assert c["toggle"] == [["Globe", "false"], ["Classic view", "true"]] and not c["panelShown"]
     assert c["card"] and c["err"] in ("", NO_CHART)                     # Classic view still works

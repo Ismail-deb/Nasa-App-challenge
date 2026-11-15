@@ -34,7 +34,7 @@
 /* Cesium's own credit bar: kept visible, readable on the dark globe */
 .globe-panel .cesium-widget-credits { opacity: .8; }
 /* an unseen box that globe.js keeps over the cyan region boxes, for the guide to point at */
-#globeRegions { position: absolute; pointer-events: none; }
+#globeRegions, .globe-track { position: absolute; pointer-events: none; }
 
 /* trend-map controls (top of the stage): switch, variable chips, experimental toggle, opacity */
 .trend-panel {
@@ -91,6 +91,37 @@
 }
 .trend-info:hover { background: var(--teal-strong, #176E7B); color: #fff; }
 
+/* relief controls (bottom-left of the stage, above Cesium's credit line): terrain switch, height slider, Top-down */
+.relief-panel {
+  position: absolute; z-index: 4; left: 12px; bottom: 40px; display: flex; flex-direction: column; align-items: flex-start; gap: 6px;
+  max-width: calc(100% - 360px); font-size: .875rem; color: #E6F8FA;
+}
+.relief-panel [hidden], .cell-card[hidden] { display: none !important; }
+.relief-panel label { display: flex; align-items: center; gap: 8px; cursor: pointer; font-weight: 600; }
+.relief-height { padding: 4px 12px; min-height: 32px; border-radius: 999px; background: rgba(6, 24, 32, .9);
+                 border: 1px solid rgba(255, 255, 255, .14); color: #BFE3EA; }
+.relief-height input { width: 110px; accent-color: var(--cyan, #3CE0D0); }
+.relief-height input:disabled { opacity: .45; cursor: not-allowed; }
+.relief-value { min-width: 3.2em; font-weight: 800; color: #9EEFFF; font-variant-numeric: tabular-nums; }
+.relief-btn { min-height: 32px; padding: 4px 14px; border-radius: 999px; background: rgba(6, 24, 32, .9); color: #9EEFFF;
+              border: 1px solid rgba(255, 255, 255, .14); font: inherit; font-weight: 800; cursor: pointer; }
+.relief-btn:hover { background: var(--teal-strong, #176E7B); color: #fff; }
+.relief-panel input:focus-visible, .relief-btn:focus-visible { outline: 3px solid var(--cyan, #3CE0D0); outline-offset: 2px; }
+
+/* cell readout: the legend's white glass, small, next to the clicked cell */
+.cell-card {
+  position: absolute; z-index: 6; width: 250px; padding: 10px 14px; border-radius: 14px; background: rgba(255, 255, 255, .96);
+  color: var(--ink, #3A2218); border: 1px solid var(--border, #EAD9BC); box-shadow: 0 0 0 2px rgba(60, 224, 208, .55), 0 12px 32px -4px rgba(0, 0, 0, .45);
+  font-size: .8125rem; line-height: 1.35;
+}
+.cell-card .cell-title { margin: 0 0 6px; font-weight: 800; font-size: .875rem; }
+.cell-rows { display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; margin: 0; }
+.cell-rows dt { color: var(--ink-2, #6B4A3A); font-weight: 600; }
+.cell-rows dd { margin: 0; font-variant-numeric: tabular-nums; }
+.cell-rows .cell-slope { font-weight: 800; }
+.cell-rows .cell-yes { color: var(--teal-strong, #176E7B); font-weight: 800; }
+.cell-rows .cell-no { color: var(--ink-2, #6B4A3A); }
+
 /* small screens: the controls and the legend sit under the globe instead of on top of it */
 @media (max-width: 767px) {
   .globe-panel { padding: 12px; }
@@ -99,6 +130,8 @@
   #globeStatus { position: static; min-height: 60px; order: 0; }
   .trend-panel { position: static; order: 2; }
   .trend-card { position: static; order: 3; width: auto; max-height: none; }
+  .relief-panel { position: static; order: 4; max-width: none; flex-direction: row; flex-wrap: wrap; }
+  .cell-card { width: min(250px, calc(100% - 16px)); }
   .trend-opacity input { width: 120px; }
 }
 @media (prefers-reduced-motion: reduce) {

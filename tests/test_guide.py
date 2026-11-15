@@ -73,7 +73,8 @@ def test_classic_tutorial_steps_are_unchanged_and_in_order():
 
 
 def test_globe_tutorial_is_a_separate_list_with_its_steps_in_order():
-    assert [s["id"] for s in GLOBE_STEPS] == ["globe", "regions", "switch", "variables", "legend", "scenarios"]
+    assert [s["id"] for s in GLOBE_STEPS] == ["globe", "regions", "terrain", "switch", "variables", "legend", "cell",
+                                             "outline", "scenarios"]
     assert len(re.findall(r"\bGUIDE_STEPS_GLOBE\s*=", CONFIG)) == 1 and len(re.findall(r"\bGUIDE_STEPS\s*=", CONFIG)) == 1
     by_id = {s["id"]: s for s in GLOBE_STEPS}
     assert by_id["globe"]["text"] == "This is Earth. Drag to spin it and scroll to zoom."
@@ -83,8 +84,17 @@ def test_globe_tutorial_is_a_separate_list_with_its_steps_in_order():
     assert "not statistically significant, which is not the same as no trend" in by_id["legend"]["text"]
     assert all(w in by_id["scenarios"]["text"] for w in ("solar", "wind", "hydro", "farming"))
     # the targets are the real elements: the globe, the region boxes, the switch, the list, the legend, the cards
-    assert [s["target"] for s in GLOBE_STEPS] == ["#globeBox", "#globeRegions", "#trendSwitch", "#trendList", "#trendLegend", "#demos"]
+    assert [s["target"] for s in GLOBE_STEPS] == ["#globeBox", "#globeRegions", "#terrainHeight", "#trendSwitch", "#trendList",
+                                                  "#trendLegend", "#globeCell", "#globeOutline", "#demos"]
     assert by_id["regions"]["globeAction"] == "showRegions" and "state.showRegions = function ()" in GLOBE_JS
+    # the new steps: the terrain slider, a cell, the US outline (the globe turns so that they are in sight)
+    assert by_id["terrain"]["text"] == "Drag this to stretch the mountains and see the terrain better."
+    assert by_id["cell"]["text"] == "Click any cell to see its exact change and p-value."
+    assert "outline" in by_id["outline"]["text"] and "tilted view of the whole country" in by_id["outline"]["text"]
+    assert by_id["cell"]["globeAction"] == by_id["outline"]["globeAction"] == "showUS" and "state.showUS = function (" in GLOBE_JS
+    # every globe step has text and a target the globe builds (or the page has); a missing one is skipped
+    assert all(s["text"].strip() and s["target"].strip() for s in GLOBE_STEPS)
+    assert "if (STEPS[i].needsResult || targetOf(STEPS[i])) return i;" in GUIDE_JS
 
 
 def test_step_texts_live_in_the_config_only():

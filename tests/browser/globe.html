@@ -60,6 +60,66 @@ const visible = el => !!el && !el.hidden && el.getClientRects().length > 0;
         out.trend.off = {show: T.layer.show};
         $('trendOn').click();
       }
+      // relief controls: offline, so only Top-down; the settings are saved all the same
+      const v = G.viewer;
+      out.relief = {switchShown: visible($('terrainSwitch')), heightShown: visible($('terrainHeight')),
+                    topDown: visible($('globeTopDown')), relief: G.relief, defaults: G.readSettings(),
+                    collision: v.scene.screenSpaceCameraController.enableCollisionDetection,
+                    minZoom: v.scene.screenSpaceCameraController.minimumZoomDistance,
+                    maxZoom: v.scene.screenSpaceCameraController.maximumZoomDistance,
+                    requestRenderMode: v.scene.requestRenderMode};
+      G.setExaggeration(2.5); G.setTerrainOn(false);
+      out.relief.saved = {terrain: w.localStorage.getItem('estd.globe.terrain'), ex: w.localStorage.getItem('estd.globe.exaggeration'),
+                          read: G.readSettings(), offlineEx: v.scene.verticalExaggeration};
+      G.setExaggeration(99);
+      out.relief.clamped = G.readSettings().exaggeration;
+      w.localStorage.removeItem('estd.globe.terrain'); w.localStorage.removeItem('estd.globe.exaggeration');
+      G.setTerrainOn(true); G.setExaggeration(1.5);
+
+      // the US outline, the label rule and a cell readout
+      const C2 = w.Cesium;
+      for (let i = 0; i < 100 && G.outline.status === 'loading'; i++) await sleep(100);
+      out.outline = {status: G.outline.status, rings: G.outline.rings,
+                     entities: v.entities.values.filter(e => e.id.startsWith('us-outline:')).length};
+      out.labels = G.labelShown;
+      G.showUS(true);
+      await sleep(2800);
+      out.usView = {pitch: Math.round(C2.Math.toDegrees(v.camera.pitch))};
+      $('globeTopDown').click();
+      await sleep(1800);
+      out.topDown = {pitch: Math.round(C2.Math.toDegrees(v.camera.pitch))};
+      G.showUS(true);
+      await sleep(2500);
+      const x = T.variables.find(y => y.key === T.key);
+      for (let i = 0; i < 100 && !x.cells; i++) await sleep(100);
+      // a known significant cell from the file: decoded by the page, then clicked on screen
+      // (one outside every region box: inside one, the box is clicked instead)
+      const boxes = (await (await w.fetch('/presets')).json()).map(p => p.bbox);
+      const cells = x.cells;
+      let flagAt = -1;
+      for (let i = Math.floor(cells.flag.length / 3); i < cells.flag.length && flagAt < 0; i++) {
+        const la = cells.lat[Math.floor(i / cells.nlon)], lo = cells.lon[i % cells.nlon];
+        if (cells.flag[i] === '1' && !boxes.some(b => lo >= b[0] - 1 && lo <= b[2] + 1 && la >= b[1] - 1 && la <= b[3] + 1)) flagAt = i;
+      }
+      const row = Math.floor(flagAt / cells.nlon), col = flagAt % cells.nlon;
+      const known = G.decodeCell(cells, cells.lon[col], cells.lat[row]);
+      out.cell = {index: flagAt, row, col, decoded: known,
+                  masked: G.decodeCell(cells, cells.lon[0], cells.lat[0]), outside: G.decodeCell(cells, 10, 10)};
+      const canvas = v.scene.canvas, at = C2.SceneTransforms.worldToWindowCoordinates(v.scene, C2.Cartesian3.fromDegrees(cells.lon[col], cells.lat[row]));
+      const press = (type, p) => canvas.dispatchEvent(new w.PointerEvent(type, {bubbles: true, clientX: canvas.getBoundingClientRect().left + p.x,
+                                   clientY: canvas.getBoundingClientRect().top + p.y, pointerId: 1, pointerType: 'mouse', button: 0, buttons: type === 'pointerdown' ? 1 : 0, isPrimary: true}));
+      if (at) {
+        press('pointerdown', at); press('pointerup', at);
+        await sleep(200);
+        out.cell.clicked = {shown: visible($('cellCard')), text: $('cellCard').textContent, state: G.cell};
+        d.dispatchEvent(new w.KeyboardEvent('keydown', {key: 'Escape', bubbles: true}));
+        out.cell.afterEscape = visible($('cellCard'));
+        press('pointerdown', at); press('pointerup', at);
+        await sleep(200);
+        const again = visible($('cellCard'));
+        $('trendPanel').dispatchEvent(new w.PointerEvent('pointerdown', {bubbles: true}));
+        out.cell.clickElsewhere = {before: again, after: visible($('cellCard'))};
+      }
       for (const id of G.regions) {
         $('cardTitle').textContent = ''; $('err').textContent = '';
         const ok = G.selectPreset(id);
