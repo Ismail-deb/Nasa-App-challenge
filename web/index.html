@@ -132,7 +132,7 @@ async function run() {
   // all wording and number formatting comes from the server (app/display.py, unit-tested)
   $('cardTitle').textContent = d.headline;
   $('verdict').textContent = d.verdict;
-  $('verdict').className = 'verdict ' + (d.significant ? 'sig' : 'nosig');
+  $('verdict').className = 'verdict ' + (d.significant && d.reliability !== 'low' ? 'sig' : 'nosig');
   $('slope').textContent = `${d.slope_text} ${d.units} per decade` + (d.percent_text ? ` (${d.percent_text})` : '');
   $('ci').textContent = d.range_text + (d.percent_range_text ? ` (${d.percent_range_text})` : '');
   $('ciLabel').textContent = d.method === 'corrected' ? '95% range (adjusted for autocorrelation)' : '95% range (plain)';

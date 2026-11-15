@@ -159,6 +159,8 @@ categories:
         variable: Snowf_tavg
         units: kg m-2 s-1
         card_units: mm/day          # display only: x 86400, as water equivalent
+        zero_inflated: true         # many months with (almost) no snow: reliability check
+        min_seasonal_peak: 0.07     # mm/day of water in the snowiest month (~2 mm/month); see README
         description: >
           How much snow falls, as millimetres of melted water per day (monthly average).
         note: >
@@ -170,7 +172,10 @@ categories:
         version: "2.1"         # 2.1 covers 2000-present (2.0 stops 2014)
         variable: SnowDepth_inst
         units: m                    # file: monthly mean of instantaneous values
-        description: How deep the snow lies on the ground, in metres (monthly average).
+        card_units: cm              # display only: x 100 (metres would round to ~0 for thin snow)
+        zero_inflated: true
+        min_seasonal_peak: 1.0      # cm in the snowiest month; see README
+        description: How deep the snow lies on the ground, in centimetres (monthly average).
         note: >
           Model estimate (GLDAS). Grid cells on permanent ice sheets such as Greenland hold very large values that are not seasonal snow; months with zero are real (no snow), not missing.
       - id: GLDAS_NOAH025_M/SWE_inst
@@ -179,6 +184,8 @@ categories:
         version: "2.1"         # 2.1 covers 2000-present (2.0 stops 2014)
         variable: SWE_inst
         units: kg m-2               # file: monthly mean of instantaneous values; 1 kg/m2 = 1 mm
+        zero_inflated: true
+        min_seasonal_peak: 2.0      # kg/m2 (= mm of water) in the snowiest month; see README
         description: >
           How much water you would get if the snowpack melted, in kg/m² (the same as millimetres
           of water; monthly average).

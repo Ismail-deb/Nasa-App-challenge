@@ -116,6 +116,17 @@ def timeseries(variable: str, bbox: str, start: str | None = None, end: str | No
             "source": source, "region": region}
 
 
+def _reliability(entry: dict, ser, units: str) -> dict | None:
+    """Reliability check for zero-inflated variables (snow); None (= ok, not checked) otherwise.
+    The catalog threshold is in display units; the series is in stored units."""
+    if not entry.get("zero_inflated"):
+        return None
+    peak_min = entry.get("min_seasonal_peak")
+    if peak_min is not None:
+        peak_min = peak_min / display.slope_factor(entry, units)
+    return stats.reliability(ser, peak_min)
+
+
 @app.get("/trend")
 def trend(variable: str, bbox: str, start: str | None = None, end: str | None = None,
           deseasonalize: bool = True, method: str = "corrected"):
@@ -128,7 +139,8 @@ def trend(variable: str, bbox: str, start: str | None = None, end: str | None = 
     fitted = r.pop("fitted")
     region_name = presets.load_presets()[region]["name"] if region else None
     try:
-        shown = display.present(entry, ser, fitted, r, region_name, units)
+        rel = _reliability(entry, ser, units)
+        shown = display.present(entry, ser, fitted, r, region_name, units, rel)
     except ValueError as ex:                      # unexpected stored units: refuse, do not guess
         raise HTTPException(500, str(ex))
     values, fitted_shown = shown.pop("values_display"), shown.pop("fitted_display")
@@ -140,7 +152,6 @@ def trend(variable: str, bbox: str, start: str | None = None, end: str | None = 
         "fitted": _values(fitted_shown.reindex(ser.index)),   # same length as values; gaps -> null
         **{k: (round(v, 5) if isinstance(v, float) else v) for k, v in r.items()},
         **{k: (round(v, 5) if isinstance(v, float) else v) for k, v in shown.items()},
-        "verdict": stats.verdict(r["significant"]),
         "lens_message": None,   # lenses arrive after Step 1 is confirmed
         "source": source,       # "preset_series" (data/series/) or "gridded" (data/processed/)
         "region": region,       # preset id when the bbox matches one, else null

@@ -129,3 +129,39 @@ def analyze(series: pd.Series, deseasonalize: bool = False, alpha: float = ALPHA
 def verdict(significant: bool) -> str:
     return ("Significant" if significant
             else "Not significant yet; a longer record may reveal a trend")
+
+
+# ---------------------------------------------------------------- reliability (zero-inflated series)
+
+TIE_SHARE = 0.5     # more than this share of months at one value (usually 0) -> unreliable
+
+
+def seasonal_peak(series: pd.Series) -> float:
+    """Largest of the 12 calendar-month means (the climatological peak month), NaNs dropped."""
+    s = series.astype(float).dropna()
+    return float(s.groupby(s.index.month).mean().max())
+
+
+def reliability(series: pd.Series, min_seasonal_peak: float | None = None) -> dict:
+    """Is a Mann-Kendall / Sen's slope trend test meaningful for this zero-inflated series?
+
+    "low" when either
+      1. the seasonal peak (largest calendar-month mean) is below `min_seasonal_peak`
+         (same units as the series): there is too little snow even in the snowiest month; or
+      2. more than TIE_SHARE of the months are exactly zero, or tied at the most common value:
+         Mann-Kendall and Sen's slope are unreliable when most values are tied.
+    Snow-free summers alone do NOT trigger it (that is seasonality; the test removes it).
+    Returns {"reliability": "ok"|"low", "reason": str|None, "seasonal_peak", "share_zero",
+    "share_tied", "trigger": None|"seasonal_peak"|"ties"}.
+    """
+    s = series.astype(float).dropna()
+    peak = seasonal_peak(s)
+    share_zero = float((s == 0).mean())
+    share_tied = float(s.value_counts().iloc[0] / len(s))
+    out = {"reliability": "ok", "reason": None, "seasonal_peak": peak,
+           "share_zero": share_zero, "share_tied": share_tied, "trigger": None}
+    if min_seasonal_peak is not None and peak < min_seasonal_peak:
+        out.update(reliability="low", trigger="seasonal_peak")
+    elif share_zero > TIE_SHARE or share_tied > TIE_SHARE:
+        out.update(reliability="low", trigger="ties")
+    return out

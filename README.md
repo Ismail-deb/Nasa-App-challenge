@@ -256,6 +256,37 @@ selects the basic test; the unadjusted range is also returned as `ci_plain_low/h
 - Removing the seasonal cycle (on by default) matters: without it, the yearly swing swamps the test.
 - A significant trend says the change is unlikely to be chance. It does not say what caused it.
 
+**Snow: when the trend test is not reliable.** Snow depth, snow water equivalent (SWE) and
+snowfall are *zero-inflated*: many months have no snow at all (marked `zero_inflated: true` in
+`catalog.yml`). Snow-free summers on their own are just the seasonal cycle, which the test removes,
+so they are not a problem. Two situations are, and the result is then marked
+`reliability: "low"`:
+1. **Too little snow even at the seasonal peak.** We average each calendar month over the record
+   (12 values) and take the largest, the *seasonal peak*. If that is below a minimum meaningful
+   amount, the series is mostly trace amounts and its "trend" is noise in tiny numbers.
+2. **Mostly tied values.** If more than 50% of months are exactly zero (or tied at the most common
+   value), Mann-Kendall and Sen's slope are unreliable, because they work by comparing pairs of
+   months and most pairs are ties.
+
+Minimum seasonal peak (regional mean in the snowiest month), all based on one physical anchor:
+about **1 cm of snow lying on the ground**.
+
+| Variable | Minimum seasonal peak | Why |
+|---|---|---|
+| Snow depth | 1 cm | A common threshold for "snow on the ground"; below it, snow cover is patchy or trace. |
+| Snow water equivalent | 2 mm of water | 1 cm of settled snow at a typical density of about 200 kg/m³ (fresh snow 100: 1 mm; old snow 300: 3 mm). |
+| Snowfall | 0.07 mm/day of water | About 2 mm of water in the month, enough to lay down about 1 cm of settled snow. |
+
+For a low-reliability result the numbers are still returned, but the card says "Not enough snow
+in this region to test a trend reliably" instead of a significant / not significant verdict, and
+no lens sentence is shown. In the demo regions this flags US Southwest snow depth (peak 0.37 cm)
+and SWE (peak 0.74 mm). **Close to the line:** US Southwest snowfall has a peak of 0.095 mm/day,
+only 1.36 times its 0.07 mm/day minimum, so it is tested normally (and currently shows a
+significant decrease); treat it with care. Every other snow series is at least twice its minimum
+(Great Plains SWE 4.05 mm = 2.0x, Great Plains snow depth 2.54 cm = 2.5x). The thresholds were set
+from the 1 cm anchor above, not tuned to these results. Snow depth is shown in cm (not m), and a significant change is always shown with enough
+digits (never "about 0").
+
 ## Data sources
 - NASA GES DISC, accessed with `earthaccess`: MERRA-2 `M2TMNXSLV` (temperature, 50 m wind),
   GPM IMERG `GPM_3IMERGM` v07 (precipitation), GLDAS Noah `GLDAS_NOAH025_M` v2.1 (soil moisture).

@@ -181,7 +181,7 @@ def test_kg_m2_state_variables_are_never_multiplied():
     """Soil moisture and SWE are also 'kg m-2' but are amounts, not accumulations: no conversion,
     and asking for mm/day without accumulation_hours is refused rather than guessed."""
     cat = {e["id"]: e for _, e in common.iter_entries(common.load_catalog())}
-    for vid in ("GLDAS_NOAH025_M/SoilMoi0_10cm_inst", "GLDAS_NOAH025_M/SWE_inst", "GLDAS_NOAH025_M/SnowDepth_inst"):
+    for vid in ("GLDAS_NOAH025_M/SoilMoi0_10cm_inst", "GLDAS_NOAH025_M/SWE_inst"):
         assert display.slope_factor(cat[vid]) == 1.0 and display.conversion_note(cat[vid]) is None
     with pytest.raises(ValueError):
         display.slope_factor({"id": "x", "units": "kg m-2", "card_units": "mm/day"})
@@ -194,6 +194,7 @@ def test_catalog_gldas_display_units_match_verified_file_attributes():
     assert display.slope_factor(cat["GLDAS_NOAH025_M/Qs_acc"]) == 8.0
     assert display.slope_factor(cat["GLDAS_NOAH025_M/Evap_tavg"]) == 86400.0
     assert display.slope_factor(cat["GLDAS_NOAH025_M/Snowf_tavg"]) == 86400.0
-    assert display.unit_label(cat["GLDAS_NOAH025_M/SnowDepth_inst"]) == "m"
+    assert display.unit_label(cat["GLDAS_NOAH025_M/SnowDepth_inst"]) == "cm"          # shown x 100
+    assert display.slope_factor(cat["GLDAS_NOAH025_M/SnowDepth_inst"]) == 100.0
     assert display.unit_label(cat["GLDAS_NOAH025_M/SWE_inst"]) == "kg/m² (= mm of water)"
     assert "NOT river flow" in cat["GLDAS_NOAH025_M/Qs_acc"]["note"]

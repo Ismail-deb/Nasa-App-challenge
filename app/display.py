@@ -6,6 +6,8 @@ import math
 import numpy as np
 import pandas as pd
 
+import stats
+
 MEAN_DAYS_PER_MONTH = 365.25 / 12
 HOURS_PER_MEAN_MONTH = 24 * MEAN_DAYS_PER_MONTH          # 730.5
 
@@ -23,6 +25,7 @@ UNIT_LABELS = {
     "mm/month": "mm/month",
     "mm/day": "mm/day",
     "%": "%",
+    "cm": "cm",
 }
 
 
@@ -48,6 +51,7 @@ def _conversion(entry: dict, series_units: str | None):
       kg m-2 with accumulation_hours: 3
                  (GLDAS *_acc: mean of 3-h totals)    -> mm/day:   x 8       (8 three-hour periods/day)
       1 (MERRA-2 CLDTOT: fraction of sky, 0 to 1)     -> %:        x 100
+      m (GLDAS SnowDepth_inst)                        -> cm:       x 100
     """
     card = entry.get("card_units")
     if not card:
@@ -62,6 +66,8 @@ def _conversion(entry: dict, series_units: str | None):
     elif card == "mm/day" and units == "kg m-2" and acc == 3:
         kind = ("constant", 8.0,
                 "monthly mean of 3-hour accumulations (kg/m2 per 3 h) x 8 = mm/day of water")
+    elif card == "cm" and units == "m" and not acc:
+        kind = ("constant", 100.0, "depth in metres x 100 = cm")
     elif card == "%" and units == "1" and not acc:
         kind = ("constant", 100.0,
                 "fraction of sky covered (0 to 1) x 100 = % of sky; a change is in percentage points")
@@ -99,9 +105,11 @@ def slope_factor(entry: dict, series_units: str | None = None) -> float:
 
 # ---------------------------------------------------------------- formatting
 
-def fmt_signed(x: float) -> str:
+def fmt_signed(x: float, precise: bool = False) -> str:
     """Signed number that never collapses to '+0.00':
-    |x| >= 0.1 -> 2 decimals; 0.0001 <= |x| < 0.1 -> 2 significant figures; smaller -> 'about 0'."""
+    |x| >= 0.1 -> 2 decimals; 0.0001 <= |x| < 0.1 -> 2 significant figures; smaller -> 'about 0'.
+    precise=True (used for significant results, so the card never says 'is decreasing ... about 0'):
+    below 0.0001, 2 significant figures down to 0.000001, then scientific form (e.g. '-3.2e-08')."""
     if x is None or (isinstance(x, float) and math.isnan(x)):
         return "n/a"
     if x == 0:
@@ -110,8 +118,10 @@ def fmt_signed(x: float) -> str:
     sign = "+" if x > 0 else "-"
     if a >= 0.1:
         return f"{sign}{a:.2f}"
-    if a < 1e-4:
+    if a < 1e-4 and not precise:
         return "about 0"
+    if a < 1e-6:
+        return f"{sign}{a:.1e}"
     decimals = -math.floor(math.log10(a)) + 1                 # 2 significant figures
     s = f"{a:.{decimals}f}"
     if "." in s:
@@ -119,32 +129,63 @@ def fmt_signed(x: float) -> str:
     return f"{sign}{s}"
 
 
-def fmt_percent(x: float) -> str:
+def fmt_percent(x: float, precise: bool = False) -> str:
     """Signed percent: 1 decimal from 0.1 upwards (e.g. '+2.6%'), smaller values like fmt_signed."""
     if x is not None and not (isinstance(x, float) and math.isnan(x)) and abs(x) >= 0.1:
         return f"{'+' if x > 0 else '-'}{abs(x):.1f}%"
-    s = fmt_signed(x)
+    s = fmt_signed(x, precise)
     return s if s in ("about 0", "n/a") else f"{s}%"
 
 
-def fmt_range(lo: float, hi: float) -> str:
-    return f"{fmt_signed(lo)} to {fmt_signed(hi)}"
+def fmt_range(lo: float, hi: float, precise: bool = False) -> str:
+    return f"{fmt_signed(lo, precise)} to {fmt_signed(hi, precise)}"
+
+
+def fmt_amount(x: float) -> str:
+    """Unsigned amount: 2 decimals from 0.1 up, 2 significant figures below (e.g. '0.037')."""
+    return fmt_signed(abs(x), precise=True).lstrip("+") if x else "0"
+
+
+# ---------------------------------------------------------------- reliability (zero-inflated snow)
+
+LOW_RELIABILITY_VERDICT = "Not enough snow in this region to test a trend reliably"
+
+
+def reliability_reason(rel: dict, entry: dict, units: str, k: float) -> str | None:
+    """Plain-language reason for a 'low' reliability result (k: stored -> display factor)."""
+    if rel.get("reliability") != "low":
+        return None
+    if rel["trigger"] == "seasonal_peak":
+        return (f"Even in its snowiest month this region averages only "
+                f"{fmt_amount(rel['seasonal_peak'] * k)} {units}, below the "
+                f"{entry['min_seasonal_peak']:g} {units} needed for a meaningful trend test.")
+    share = max(rel["share_zero"], rel["share_tied"])
+    what = "have no snow at all" if rel["share_zero"] >= rel["share_tied"] else "have exactly the same value"
+    return (f"{share:.0%} of months {what}; the trend test (Mann-Kendall with Sen's slope) is "
+            f"unreliable when most values are tied.")
 
 
 def lower_first(name: str) -> str:
     return name[0].lower() + name[1:] if name and not name[:2].isupper() else name
 
 
-def headline(name: str, significant: bool, trend: str, region_name: str | None) -> str:
+def headline(name: str, significant: bool, trend: str, region_name: str | None,
+             reliable: bool = True) -> str:
+    where = region_name or "the selected region"
+    if not reliable:
+        return f"{name} for {where}: trend not tested reliably"
     if not significant:
-        where = region_name or "the selected region"
         return f"No clear trend in {lower_first(name)} for {where}"
     return f"{name} is {trend}"
 
 
 def explanation(significant: bool, years: float, slope_text: str, units: str,
-                deseasonalized: bool, method: str, percent_text: str | None = None) -> str:
+                deseasonalized: bool, method: str, percent_text: str | None = None,
+                low_reason: str | None = None) -> str:
     change = f"{slope_text} {units} per decade" + (f" ({percent_text} of the average)" if percent_text else "")
+    if low_reason:
+        return (f"Over {years:.1f} years, the fitted change is {change}, but it should not be relied on. "
+                f"{low_reason} Neither 'significant' nor 'not significant' would be a fair verdict here.")
     parts = [f"Over {years:.1f} years, the fitted change is {change}."]
     if significant:
         parts.append("Significant means a trend this large would be unlikely (p < 0.05) "
@@ -162,9 +203,10 @@ def explanation(significant: bool, years: float, slope_text: str, units: str,
 # ---------------------------------------------------------------- assemble a trend result
 
 def present(entry: dict, ser: pd.Series, fitted: pd.Series, r: dict, region_name: str | None,
-            series_units: str | None = None) -> dict:
+            series_units: str | None = None, rel: dict | None = None) -> dict:
     """Display fields for /trend. `ser` and `fitted` are in stored-series units; `r` is the
-    stats result (unchanged). Returns display-unit values and the text for the result card."""
+    stats result (unchanged); `rel` the stats.reliability result (None: not checked, i.e. ok).
+    Returns display-unit values and the text for the result card."""
     k = slope_factor(entry, series_units)
     values = convert_values(entry, ser, series_units)
     fitted_disp = fitted * k
@@ -184,12 +226,25 @@ def present(entry: dict, ser: pd.Series, fitted: pd.Series, r: dict, region_name
     out["ci_low_percent"] = r["ci_low_per_decade"] / mean * 100 if pct else None
     out["ci_high_percent"] = r["ci_high_per_decade"] / mean * 100 if pct else None
 
-    out["slope_text"] = fmt_signed(out["slope_per_decade"])
-    out["range_text"] = fmt_range(out["ci_low_per_decade"], out["ci_high_per_decade"])
-    out["percent_text"] = fmt_percent(out["percent_per_decade"]) if pct else None
-    out["percent_range_text"] = (f"{fmt_percent(out['ci_low_percent'])} to {fmt_percent(out['ci_high_percent'])}"
-                                 if pct else None)
-    out["headline"] = headline(entry["name"], r["significant"], r["trend"], region_name)
+    rel = rel or {"reliability": "ok"}
+    reliable = rel["reliability"] == "ok"
+    out["reliability"] = rel["reliability"]
+    out["reliability_reason"] = reliability_reason(rel, entry, out["units"], k)
+    out["seasonal_peak"] = rel["seasonal_peak"] * k if "seasonal_peak" in rel else None
+    precise = bool(r["significant"])          # a significant change is never shown as "about 0"
+    out["slope_text"] = fmt_signed(out["slope_per_decade"], precise)
+    out["range_text"] = fmt_range(out["ci_low_per_decade"], out["ci_high_per_decade"], precise)
+    out["percent_text"] = fmt_percent(out["percent_per_decade"], precise) if pct else None
+    out["percent_range_text"] = (f"{fmt_percent(out['ci_low_percent'], precise)} to "
+                                 f"{fmt_percent(out['ci_high_percent'], precise)}" if pct else None)
+    out["headline"] = headline(entry["name"], r["significant"], r["trend"], region_name, reliable)
     out["explanation"] = explanation(r["significant"], r["record_years"], out["slope_text"], out["units"],
-                                     r["deseasonalized"], r["method"], out["percent_text"])
+                                     r["deseasonalized"], r["method"], out["percent_text"],
+                                     out["reliability_reason"])
+    out["verdict"] = verdict_text(r["significant"], reliable)
     return out
+
+
+def verdict_text(significant: bool, reliable: bool = True) -> str:
+    """Card verdict. Low reliability replaces the significant / not significant verdict."""
+    return stats.verdict(significant) if reliable else LOW_RELIABILITY_VERDICT
