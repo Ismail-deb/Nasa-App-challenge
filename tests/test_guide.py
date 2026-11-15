@@ -41,7 +41,7 @@ def test_guide_name_is_defined_exactly_once():
 def test_guide_name_is_hardcoded_nowhere_else():
     """The literal name appears on the one config line and in no other file the app serves or runs."""
     assert CONFIG.count(NAME) == 1 and f'const GUIDE_NAME = "{NAME}";' in CONFIG
-    files = [p for p in WEB.rglob("*") if p.is_file() and p.suffix != ".webp"] + list((common.ROOT / "app").glob("*.py"))
+    files = [p for p in WEB.rglob("*") if p.is_file() and p.suffix not in (".webp", ".woff2")] + list((common.ROOT / "app").glob("*.py"))
     files += [common.ROOT / n for n in ("lenses.yml", "presets.yml", "catalog.yml")]
     for path in files:
         if path.name == "config.js":

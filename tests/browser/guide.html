@@ -211,6 +211,7 @@ async function main() {
   // a saved position over the chart is nudged to a free edge (the saved value itself stays as it was)
   w.localStorage.setItem('estd.guide.pos', JSON.stringify({x: 0.5, y: 0.5}));
   await load(); await sleep(900);
+  $('chart').scrollIntoView({block: 'center'}); w.dispatchEvent(new w.Event('scroll')); await sleep(900);   // the chart is now where he stood
   let bn = box(av());
   out.nudge = {overChart: overlap(bn, box($('chart'))), saved: w.localStorage.getItem('estd.guide.pos'), inWindow: inWindow(bn),
                atEdge: bn.left <= 0 || bn.right >= cw() || bn.top <= 0 || bn.bottom >= w.innerHeight - 1};

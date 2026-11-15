@@ -6,31 +6,195 @@
 <title>Earth System Trend Detective</title>
 <script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js"></script>
 <style>
-  body { font-family: system-ui, sans-serif; margin: 0; background: #f5f7fa; color: #1b2733; }
-  header { background: #0b3d91; color: #fff; padding: 14px 20px; }
-  header h1 { margin: 0; font-size: 1.3rem; }
-  header p { margin: 4px 0 0; font-size: .9rem; opacity: .85; }
-  main { max-width: 980px; margin: 0 auto; padding: 16px; display: grid; gap: 14px; }
-  .panel { background: #fff; border: 1px solid #dde3ea; border-radius: 8px; padding: 14px; }
-  .row { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; }
-  label { display: grid; gap: 4px; font-size: .8rem; font-weight: 600; }
-  input, select, button { font: inherit; padding: 6px 8px; border: 1px solid #b8c2cc; border-radius: 6px; }
-  input.coord { width: 90px; }
-  button:disabled { opacity: .5; cursor: not-allowed; }
-  button { background: #0b3d91; color: #fff; border: 0; cursor: pointer; padding: 8px 16px; }
-  button.secondary { background: #e8eef8; color: #0b3d91; }
-  #desc { font-size: .9rem; margin: 10px 0 0; }
-  #note { font-size: .8rem; color: #6a5200; margin: 4px 0 0; }
-  #card h2 { margin: 0 0 8px; font-size: 1.1rem; }
-  .verdict { font-weight: 700; padding: 3px 10px; border-radius: 12px; display: inline-block; }
-  .sig { background: #d7f0dd; color: #14532d; }
-  .nosig { background: #fdf0c8; color: #6a5200; }
-  .stats { display: flex; flex-wrap: wrap; gap: 24px; margin: 12px 0 4px; }
-  .stats div span { display: block; font-size: .75rem; color: #5b6b7b; }
-  .stats div b { font-size: 1.2rem; }
-  #err { color: #b00020; }
+  /* ---- design tokens (design/stitch DESIGN.md, written "Colors" section) ---- */
+  @font-face {
+    font-family: "Nunito Sans"; font-style: normal; font-weight: 200 1000; font-display: swap;
+    src: url("/static/fonts/nunito-sans-latin.woff2") format("woff2");
+  }
+  :root {
+    --bg: #FBF3E4; --panel: #FFFFFF; --border: #EAD9BC; --well: #F3E4C8; --cream: #FFF8F0;
+    --ink: #3A2218; --ink-2: #6B4A3A;
+    --teal: #1F8A9A; --teal-strong: #176E7B;          /* strong: text and filled controls (contrast 4.5:1+) */
+    --orange: #E0652F; --orange-ink: #A23900; --blue: #3B6FB6;
+    --stage: #0B2530; --cyan: #3CE0D0;
+    --radius: 16px; --radius-sm: 12px;
+    --shadow-1: 0 4px 16px -2px rgba(107, 74, 58, .08), 0 2px 6px -1px rgba(107, 74, 58, .04);
+    --shadow-2: 0 12px 32px -4px rgba(58, 34, 24, .12), 0 4px 12px -2px rgba(58, 34, 24, .06);
+    --font: "Nunito Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { font-family: var(--font); font-size: 16px; line-height: 1.5; margin: 0; background: var(--bg); color: var(--ink); overflow-x: hidden; }
+  h1, h2, h3, p { margin: 0; }
+  svg.icon { width: 1.25em; height: 1.25em; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+  :focus-visible { outline: 3px solid var(--teal-strong); outline-offset: 2px; }
+
+  /* ---- header ---- */
+  header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px;
+           padding: 16px 40px; border-bottom: 1px solid var(--border); background: var(--bg); }
+  .brand { display: flex; align-items: center; gap: 14px; min-width: 0; }
+  .brand-mark { width: 44px; height: 44px; border-radius: var(--radius-sm); background: var(--teal-strong); color: #fff;
+                display: flex; align-items: center; justify-content: center; flex: none; font-size: 22px; }
+  header h1 { font-size: 1.375rem; font-weight: 800; letter-spacing: -.01em; line-height: 1.2; }
+  header p { font-size: .875rem; color: var(--ink-2); line-height: 1.35; margin-top: 2px; }
+  .header-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+
+  /* ---- layout ---- */
+  main { max-width: 1440px; margin: 0 auto; padding: 32px 40px 48px; display: grid; gap: 32px; }
+  main > * { min-width: 0; }
+  .top-grid, .result-grid { display: grid; gap: 24px; grid-template-columns: minmax(0, 1fr); align-items: start; }
+  .top-grid > *, .result-grid > * { min-width: 0; }
+  .result-grid { grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); align-items: stretch; }
+  body[data-view="globe"] .top-grid { grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px; box-shadow: var(--shadow-1); }
+  .panel-head h2 { font-size: 1.25rem; font-weight: 800; letter-spacing: -.01em; }
+  .panel-head p, .caption { font-size: .875rem; color: var(--ink-2); }
   .hidden { display: none; }
-  .stats div span span { display: inline; }
+
+  /* ---- controls ---- */
+  .row { display: flex; flex-wrap: wrap; gap: 16px; align-items: end; }
+  label { display: grid; gap: 6px; font-size: .875rem; font-weight: 700; }
+  input, select, button { font: inherit; color: inherit; }
+  input[type="text"], input[type="month"], select {
+    width: 100%; min-height: 44px; padding: 8px 12px; background: var(--panel); border: 1.5px solid var(--border);
+    border-radius: var(--radius-sm); font-size: 1rem; font-weight: 400;
+  }
+  select { background-color: var(--cream); }
+  input[type="text"]:focus-visible, input[type="month"]:focus-visible, select:focus-visible { outline: 2px solid var(--teal-strong); outline-offset: 0; }
+  input[type="checkbox"] { width: 20px; height: 20px; accent-color: var(--teal-strong); margin: 0; }
+  label.check { display: flex; align-items: center; gap: 8px; font-weight: 600; min-height: 44px; }
+  button { cursor: pointer; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  #go { background: var(--teal-strong); color: #fff; border: 0; border-radius: var(--radius-sm); padding: 10px 20px;
+        min-height: 44px; font-size: .9375rem; font-weight: 700; }
+  #go:not(:disabled):hover { background: #125A65; }
+  .selectors { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-top: 20px; }
+  #lensStatus { color: #93000A; font-size: .875rem; }
+  #desc { font-size: 1rem; margin-top: 16px; }
+  #note { font-size: .875rem; color: var(--ink-2); margin-top: 4px; }
+  #err { color: #93000A; font-weight: 600; margin-top: 8px; }
+  #err:empty, #note:empty, #desc:empty, #lensStatus:empty, #cardNote:empty { display: none; }
+
+  /* scenario cards (built from /presets) */
+  #demos { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; margin-top: 16px; }
+  #demos button {
+    display: grid; gap: 4px; justify-items: start; text-align: left; padding: 16px; min-height: 132px;
+    background: var(--panel); color: var(--ink); border: 1px solid var(--border); border-radius: var(--radius-sm);
+    transition: background-color .15s, box-shadow .15s;
+  }
+  #demos button:hover { background: var(--cream); }
+  #demos button[aria-pressed="true"] { background: var(--cream); box-shadow: 0 0 0 2px var(--teal-strong); border-color: transparent; }
+  #demos .sc-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; margin-bottom: 4px; }
+  #demos .sc-icon { width: 36px; height: 36px; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #fff; background: var(--teal-strong); font-size: 18px; }
+  #demos button[data-lens="solar"] .sc-icon { background: var(--orange-ink); }
+  #demos button[data-lens="wind"] .sc-icon { background: var(--blue); }
+  #demos button[data-lens="farming"] .sc-icon { background: #4D6B2F; }
+  #demos .sc-lens { font-size: .875rem; font-weight: 700; color: var(--ink-2); }
+  #demos button[aria-pressed="true"] .sc-lens { background: var(--teal-strong); color: #fff; padding: 1px 10px; border-radius: 999px; }
+  #demos .sc-name { font-size: 1rem; font-weight: 800; line-height: 1.25; }
+  #demos .sc-sub { font-size: .875rem; color: var(--ink-2); line-height: 1.35; }
+  #demos .sc-src { font-size: .875rem; font-weight: 700; color: var(--teal-strong); margin-top: 4px; }
+
+  /* own region and period */
+  details.custom { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border); }
+  details.custom > summary { display: flex; align-items: center; gap: 8px; cursor: pointer; font-weight: 700; list-style: none; min-height: 32px; }
+  details.custom > summary::-webkit-details-marker { display: none; }
+  details.custom > summary .icon:first-child { color: var(--teal-strong); }
+  details.custom > summary .chev { margin-left: auto; transition: transform .15s; color: var(--ink-2); }
+  details.custom[open] > summary .chev { transform: rotate(180deg); }
+  .custom-body { margin-top: 12px; padding: 16px; background: var(--cream); border: 1px solid var(--border); border-radius: var(--radius-sm); display: grid; gap: 12px; }
+  .coords { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+  .period { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  .custom-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+
+  /* ---- result card ---- */
+  #card, #resultState { display: flex; flex-direction: column; gap: 16px; min-height: 420px; }
+  #card.hidden { display: none; }
+  .card-head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 12px; }
+  #card h2 { font-size: 1.75rem; font-weight: 800; letter-spacing: -.01em; line-height: 1.2; flex: 1 1 240px; }
+  .verdict-wrap { display: inline-flex; align-items: center; flex: none; }
+  .verdict { font-size: .875rem; font-weight: 700; padding: 6px 14px; border-radius: 999px; display: inline-block; }
+  .sig { background: var(--teal-strong); color: #fff; }
+  .nosig { background: var(--well); color: var(--ink); border: 1px solid var(--border); }
+  .metric { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 20px;
+            background: var(--cream); border: 1px solid var(--border); border-radius: var(--radius-sm); }
+  .metric-label { display: block; font-size: .875rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-2); }
+  #slope { display: block; font-variant-numeric: tabular-nums; margin-top: 4px; line-height: 1.1; }
+  #slopeNum { font-size: 2.75rem; font-weight: 800; letter-spacing: -.02em; color: var(--ink); }
+  #slopeUnit { font-size: 1.125rem; font-weight: 700; }
+  #card[data-state="significant"][data-trend="increasing"] #slopeNum { color: var(--orange); }
+  #card[data-state="significant"][data-trend="decreasing"] #slopeNum { color: var(--blue); }
+  .metric-icon { width: 56px; height: 56px; border-radius: var(--radius); display: flex; align-items: center; justify-content: center;
+                 font-size: 28px; flex: none; background: var(--well); color: var(--ink-2); border: 1px solid var(--border); }
+  #card[data-state="significant"][data-trend="increasing"] .metric-icon { background: rgba(224, 101, 47, .12); color: var(--orange-ink); border-color: rgba(224, 101, 47, .3); }
+  #card[data-state="significant"][data-trend="decreasing"] .metric-icon { background: rgba(59, 111, 182, .12); color: var(--blue); border-color: rgba(59, 111, 182, .3); }
+  #card[data-trend="decreasing"] .metric-icon svg { transform: scaleY(-1); }
+  .stats { display: grid; gap: 10px; padding: 16px; background: #F6EDE0; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+  .stats div { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 16px; }
+  .stats div > span { font-size: .875rem; color: var(--ink-2); font-weight: 600; }
+  .stats div b { font-size: 1rem; font-variant-numeric: tabular-nums; text-align: right; }
+  #plain { font-size: 1rem; }
+  .lens-block { padding: 16px; background: #FFF5EB; border: 1px solid #F0D5BD; border-radius: var(--radius-sm); display: grid; gap: 8px; }
+  .lens-block.empty { display: none; }
+  .lens-block h3 { display: flex; align-items: center; gap: 8px; font-size: 1rem; font-weight: 800; }
+  .lens-block h3 .icon { color: var(--orange-ink); }
+  #lensCaveat, #cardNote { font-size: .875rem; color: var(--ink-2); }
+  #cardNote { padding-top: 12px; border-top: 1px solid var(--border); margin-top: auto; }
+  /* a low-reliability result (not enough snow to test): a notice, not a verdict */
+  #card[data-state="notice"] { border-left: 4px solid var(--teal); }
+  #card[data-state="notice"] .verdict { background: var(--well); color: var(--ink); border: 1px solid var(--border); }
+  #card[aria-busy="true"] { opacity: .6; }
+
+  /* empty / loading / error / data-not-available states */
+  #resultState { align-items: center; justify-content: center; text-align: center; background: var(--cream); border-style: dashed; }
+  #resultState .state-icon { width: 56px; height: 56px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+                             font-size: 26px; background: var(--well); color: var(--teal-strong); }
+  #resultState h2 { font-size: 1.25rem; font-weight: 800; }
+  #resultState p { max-width: 36ch; color: var(--ink-2); }
+  #resultState[data-state="error"] .state-icon, #resultState[data-state="unavailable"] .state-icon { color: var(--orange-ink); }
+  #resultState[data-state="loading"] .state-icon svg { animation: spin 1.2s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ---- chart ---- */
+  .chart-panel { display: flex; flex-direction: column; gap: 4px; }
+  .chart-panel h3 { font-size: 1.25rem; font-weight: 700; }
+  .chart-wrap { position: relative; flex: 1; min-height: 380px; margin-top: 8px; }
+  #chart { height: 100%; min-height: 380px; }
+  #chartEmpty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center;
+                padding: 24px; color: var(--ink-2); border: 1px dashed var(--border); border-radius: var(--radius-sm); background: var(--cream); }
+
+  /* ---- "How we test" note ---- */
+  .method { display: flex; align-items: flex-start; gap: 16px; background: var(--cream); }
+  .method .brand-mark { width: 48px; height: 48px; }
+  .method h2 { font-size: 1.0625rem; font-weight: 800; }
+  .method p { margin-top: 4px; max-width: 110ch; }
+
+  /* ---- smaller screens ---- */
+  @media (max-width: 1023px) {
+    header { padding: 16px 24px; }
+    main { padding: 24px; gap: 24px; }
+    body[data-view="globe"] .top-grid, .result-grid { grid-template-columns: minmax(0, 1fr); }
+    #card, #resultState { min-height: 0; }
+    #resultState { padding: 32px 24px; }
+  }
+  @media (max-width: 767px) {
+    header { padding: 12px 20px; }
+    header h1 { font-size: 1.125rem; }
+    .brand-mark { width: 36px; height: 36px; font-size: 18px; }
+    main { padding: 16px 20px 32px; gap: 16px; }
+    .top-grid, .result-grid { gap: 16px; }
+    .panel { padding: 16px; }
+    #card h2 { font-size: 1.5rem; }
+    #slopeNum { font-size: 2.25rem; }
+    .coords { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .metric-icon { width: 44px; height: 44px; font-size: 22px; }
+    .chart-wrap, #chart { min-height: 320px; }
+    .method { flex-direction: column; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+  }
 </style>
 <!-- optional guide (web/guide/): the page works the same if these files fail to load -->
 <link rel="stylesheet" href="/static/guide/guide.css">
@@ -39,49 +203,100 @@
 </head>
 <body>
 <header>
-  <div id="guideControls"></div>
-  <h1 id="appTitle">Earth System Trend Detective</h1>
-  <p>Prototype · NASA MERRA-2, GPM IMERG and GLDAS monthly data · regional screening, not site-level analysis</p>
+  <div class="brand">
+    <span class="brand-mark" aria-hidden="true"><svg class="icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M4 11h14M11 4c-2.5 2.5-2.5 11.500 0 14M11 4c2.500 2.500 2.500 11.500 0 14M16.500 16.500 21 21"/></svg></span>
+    <div>
+      <h1 id="appTitle">Earth System Trend Detective</h1>
+      <p>Prototype · NASA MERRA-2, GPM IMERG and GLDAS monthly data · regional screening, not site-level analysis</p>
+    </div>
+  </div>
+  <div class="header-actions"><div id="guideControls"></div></div>
 </header>
 <main>
-  <section class="panel">
-    <div class="row">
-      <label>Lens <select id="lens"><option value="">None</option></select></label>
-      <span id="lensStatus" style="color:#b00020;font-size:.8rem;max-width:260px"></span>
-      <label>Variable <select id="variable"></select></label>
-      <label>West <input type="text" inputmode="decimal" class="coord" id="w" value="-117"></label>
-      <label>South <input type="text" inputmode="decimal" class="coord" id="s" value="31.3"></label>
-      <label>East <input type="text" inputmode="decimal" class="coord" id="e" value="-109"></label>
-      <label>North <input type="text" inputmode="decimal" class="coord" id="n" value="38"></label>
-      <label>Start <input type="month" id="start" value="2000-01"></label>
-      <label>End <input type="month" id="end"></label>
-      <label style="grid-auto-flow:column;align-items:center"><input type="checkbox" id="deseason" checked> Remove seasonal cycle</label>
-    </div>
-    <div class="row" style="margin-top:12px">
-      <button id="go" disabled>Show trend</button>
-      <span id="demos"></span>
-    </div>
-    <p id="desc"></p><p id="note"></p>
-    <p id="err"></p>
-  </section>
+  <div class="top-grid" id="topGrid">
+    <section class="panel" id="controls">
+      <div class="panel-head">
+        <h2>Demo scenarios</h2>
+        <p>Each scenario picks a region, a matching lens and a variable.</p>
+      </div>
+      <div id="demos"></div>
+      <div class="selectors">
+        <label>Lens <select id="lens"><option value="">None</option></select></label>
+        <label>Variable <select id="variable"></select></label>
+      </div>
+      <p id="lensStatus"></p>
+      <p id="desc"></p><p id="note"></p>
+      <details class="custom" id="custom" open>
+        <summary><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>
+          Try your own region and period
+          <svg class="icon chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
+        <div class="custom-body">
+          <div class="coords">
+            <label>West <input type="text" inputmode="decimal" class="coord" id="w" value="-117"></label>
+            <label>South <input type="text" inputmode="decimal" class="coord" id="s" value="31.3"></label>
+            <label>East <input type="text" inputmode="decimal" class="coord" id="e" value="-109"></label>
+            <label>North <input type="text" inputmode="decimal" class="coord" id="n" value="38"></label>
+          </div>
+          <div class="period">
+            <label>Start <input type="month" id="start" value="2000-01"></label>
+            <label>End <input type="month" id="end"></label>
+          </div>
+          <div class="custom-foot">
+            <label class="check"><input type="checkbox" id="deseason" checked> Remove seasonal cycle</label>
+            <button id="go" disabled>Show trend</button>
+          </div>
+        </div>
+      </details>
+      <p id="err" role="alert"></p>
+    </section>
+  </div>
 
-  <section class="panel"><div id="chart" style="height:380px"></div></section>
+  <div class="result-grid">
+    <div class="result-col">
+      <section class="panel" id="resultState" data-state="empty">
+        <span class="state-icon" aria-hidden="true"><svg class="icon" viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8M15 7h6v6"/></svg></span>
+        <h2 id="stateTitle">No result yet</h2>
+        <p id="stateText">Pick a demo scenario, or choose a variable and press Show trend.</p>
+      </section>
+      <section class="panel hidden" id="card">
+        <div class="card-head">
+          <h2 id="cardTitle"></h2>
+          <span class="verdict-wrap"><span class="verdict" id="verdict"></span><button type="button" class="tip" id="verdictTip" data-tip="significant" hidden>?</button></span>
+        </div>
+        <div class="metric">
+          <div><span class="metric-label">Change per decade</span><b id="slope"><span id="slopeNum"></span> <span id="slopeUnit"></span></b></div>
+          <span class="metric-icon" aria-hidden="true"><svg class="icon" viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8M15 7h6v6"/></svg></span>
+        </div>
+        <div class="stats">
+          <div><span><span id="ciLabel">95% range (adjusted for autocorrelation)</span><button type="button" class="tip" data-tip="ci95" hidden>?</button></span><b id="ci"></b></div>
+          <div><span>p-value<button type="button" class="tip" data-tip="pvalue" hidden>?</button></span><b id="p"></b></div>
+          <div><span>Record length</span><b id="len"></b></div>
+        </div>
+        <p id="plain"></p>
+        <div id="lensBlock" class="lens-block empty">
+          <h3><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16.500v.500"/></svg><span id="lensTitle">What this means</span></h3>
+          <p id="lensMsg" class="hidden"></p>
+          <p id="lensCaveat" class="hidden"></p>
+        </div>
+        <p id="cardNote"></p>
+      </section>
+    </div>
+    <section class="panel chart-panel">
+      <h3 id="chartTitle">Monthly values and trend</h3>
+      <p class="caption" id="chartSub">The thin line is the monthly regional mean; the thick line is the trend.</p>
+      <div class="chart-wrap">
+        <div id="chart"></div>
+        <p id="chartEmpty">The chart appears here once a scenario or region is loaded.</p>
+      </div>
+    </section>
+  </div>
 
-  <section class="panel hidden" id="card">
-    <h2 id="cardTitle"></h2>
-    <span class="verdict" id="verdict"></span><button type="button" class="tip" id="verdictTip" data-tip="significant" hidden>?</button>
-    <div class="stats">
-      <div><span>Change per decade</span><b id="slope"></b></div>
-      <div><span><span id="ciLabel">95% range (adjusted for autocorrelation)</span><button type="button" class="tip" data-tip="ci95" hidden>?</button></span><b id="ci"></b></div>
-      <div><span>p-value<button type="button" class="tip" data-tip="pvalue" hidden>?</button></span><b id="p"></b></div>
-      <div><span>Record length</span><b id="len"></b></div>
+  <section class="panel method">
+    <span class="brand-mark" aria-hidden="true"><svg class="icon" viewBox="0 0 24 24"><path d="M9 3h6M10 3v6l-5 9a2 2 0 0 0 1.800 3h10.400a2 2 0 0 0 1.800-3l-5-9V3M7.500 15h9"/></svg></span>
+    <div>
+      <h2>How we test</h2>
+      <p>One unusual year is not a trend. For each region we take the monthly averages from NASA MERRA-2, GPM IMERG and GLDAS, remove the seasonal cycle, and measure the change per decade with Sen's slope. A Mann-Kendall test, adjusted for month-to-month persistence, says whether that change is statistically significant. "Not significant yet" does not mean "no trend".</p>
     </div>
-    <p id="plain"></p>
-    <div id="lensBlock">
-      <p id="lensMsg" class="hidden"></p>
-      <p id="lensCaveat" class="hidden" style="font-size:.85rem;color:#5b6b7b"></p>
-    </div>
-    <p id="cardNote" style="font-size:.85rem;color:#6a5200"></p>
   </section>
 </main>
 <script>
@@ -93,6 +308,41 @@ async function api(path) {
   const j = await r.json();
   if (!r.ok) throw new Error(j.detail || r.statusText);
   return j;
+}
+
+// small inline icons (no icon font): one per lens, plus the states of the result area
+const svg = d => `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true">${d}</svg>`;
+const ICONS = {
+  solar: svg('<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.900 4.900l1.400 1.400M17.700 17.700l1.400 1.400M4.900 19.100l1.400-1.400M17.700 6.300l1.400-1.400"/>'),
+  wind: svg('<path d="M3 8h10a3 3 0 1 0-3-3M3 12h15a3 3 0 1 1-3 3M3 16h7a2.500 2.500 0 1 1-2.500 2.500"/>'),
+  hydro: svg('<path d="M12 3s6 6.500 6 11a6 6 0 0 1-12 0c0-4.500 6-11 6-11z"/>'),
+  farming: svg('<path d="M12 21v-9M12 12c0-4 3-6 7-6 0 4-3 6-7 6zM12 15c0-3-2.500-5-6-5 0 3 2.500 5 6 5z"/>'),
+  region: svg('<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c-3 3-3 15 0 18M12 3c3 3 3 15 0 18"/>'),
+  trend: svg('<path d="M3 17l6-6 4 4 8-8M15 7h6v6"/>'),
+  loading: svg('<path d="M12 3a9 9 0 1 0 9 9"/>'),
+  alert: svg('<path d="M12 4 2.500 20h19L12 4zM12 10v4M12 17v.500"/>'),
+};
+
+// what the result area shows while there is no result card: empty, loading, error or "data not available yet"
+const STATES = {
+  empty: ['trend', 'No result yet', 'Pick a demo scenario, or choose a variable and press Show trend.'],
+  loading: ['loading', 'Loading the trend…', 'Reading the monthly series and testing it.'],
+  error: ['alert', 'This result could not be loaded', 'The message next to the controls says why.'],
+  unavailable: ['alert', 'Data not available yet', 'Choose another variable, or pick a demo scenario.'],
+};
+function showState(kind) {
+  const [icon, title, text] = STATES[kind];
+  $('resultState').dataset.state = kind;
+  $('resultState').querySelector('.state-icon').innerHTML = ICONS[icon];
+  $('stateTitle').textContent = title;
+  $('stateText').textContent = text;
+  $('resultState').hidden = false;
+  $('card').classList.add('hidden');
+}
+// a failed request: keep an earlier result on screen, otherwise say so in the result area
+function showFailure(kind) {
+  $('card').removeAttribute('aria-busy');
+  if (kind === 'unavailable' || $('card').classList.contains('hidden')) showState(kind);
 }
 
 function showDesc() {
@@ -136,7 +386,13 @@ function setBounds(bbox) {
 BOUNDS.forEach(id => $(id).addEventListener('change', () => {
   const x = parseCoord($(id).value);
   if (!Number.isNaN(x)) $(id).value = fmtCoord(x);
+  markScenario(null);
 }));
+
+// the scenario card whose region is loaded is marked as pressed (null: a custom region)
+function markScenario(id) {
+  $('demos').querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.id === id)));
+}
 
 async function loadVars(keep) {
   const lens = $('lens').value;
@@ -176,26 +432,34 @@ async function init() {
     $('err').textContent = `Couldn't load the demo regions - is the server running the latest code? (${e.message})`;
   }
   const lensName = id => (lensList.find(l => l.id === id) || {name: id}).name;
+  // a scenario card: everything on it comes from /presets (presets.yml) and /lenses
+  const short = name => String(name).replace(/\s*\(.*\)\s*$/, '');
+  const detail = name => (String(name).match(/\((.*)\)\s*$/) || ['', ''])[1];
   $('demos').innerHTML = presets.map(p =>
-    `<button class="secondary" data-id="${p.id}" title="${p.why || ''}">Demo: ${p.name} (${lensName(p.lens)})</button>`).join(' ');
+    `<button type="button" data-id="${p.id}" data-lens="${p.lens}" aria-pressed="false" title="${p.why || ''}" aria-label="Demo: ${p.name} (${lensName(p.lens)})">` +
+    `<span class="sc-top"><span class="sc-icon">${ICONS[p.lens] || ICONS.region}</span><span class="sc-lens">${lensName(p.lens)}</span></span>` +
+    `<span class="sc-name">${short(p.name)}</span><span class="sc-sub">${detail(p.name) || p.why || ''}</span>` +
+    (p.source ? `<span class="sc-src">${p.source}</span>` : '') + '</button>').join('');
   $('demos').querySelectorAll('button').forEach(b => b.onclick = () =>
     demo(presets.find(p => p.id === b.dataset.id)).catch(e => $('err').textContent = 'Something went wrong: ' + e.message));
 }
 
-// a demo button selects its region, its lens and the lens's default variable
-// (or, if that has no data for this region yet, the first lens variable that does)
+// a demo button selects its region, its lens and a variable: the preset's own default variable if it
+// has one, else the lens's (or, if that has no data for this region yet, the first lens variable that does)
 async function demo(p) {
   $('err').textContent = '';
   if (!setBounds(p.bbox)) {
     $('err').textContent = `Could not set the region for ${p.name}; reload the page (Ctrl+F5) and try again.`;
     return;
   }
+  markScenario(p.id);
   const l = lensList.find(x => x.id === p.lens);
   let want;
   if (l) {
     $('lens').value = p.lens;
     const ready = l.variables.map(v => v.id).filter(id => p.variables.includes(id));
-    want = ready.includes(l.default_variable) ? l.default_variable : (ready[0] || l.default_variable);
+    const first = ready.includes(p.default_variable) ? p.default_variable : l.default_variable;
+    want = ready.includes(first) ? first : (ready[0] || l.default_variable);
   } else {
     want = p.variables[0];                 // lenses unavailable: just pick a variable with data
   }
@@ -208,12 +472,14 @@ async function run() {
   const v = vars.find(x => x.id === $('variable').value);
   if (v && !v.has_data) {
     $('err').textContent = `${v.name}: data not available yet. It will appear here once it has been exported; try another variable.`;
+    showFailure('unavailable');
     return;
   }
-  if (!$('variable').value) { $('err').textContent = LOAD_FAIL; return; }
+  if (!$('variable').value) { $('err').textContent = LOAD_FAIL; showFailure('error'); return; }
   const box = BOUNDS.map(id => parseCoord($(id).value));
   if (box.some(Number.isNaN)) {
     $('err').textContent = 'The region needs four numbers (West, South, East, North in degrees), e.g. 31.3 or 31,3.';
+    showFailure('error');
     return;
   }
   const bbox = box.join(',');
@@ -222,39 +488,58 @@ async function run() {
   if ($('start').value) q.set('start', $('start').value);
   if ($('end').value) q.set('end', $('end').value);
   let d;
-  try { d = await api('/trend?' + q); } catch (e) { $('err').textContent = e.message; return; }
+  if ($('card').classList.contains('hidden')) showState('loading'); else $('card').setAttribute('aria-busy', 'true');
+  try { d = await api('/trend?' + q); } catch (e) { $('err').textContent = e.message; showFailure('error'); return; }
 
+  $('chartTitle').textContent = d.name;
+  $('chartSub').textContent = `Monthly regional mean in ${d.units}, ${d.dates[0]} to ${d.dates[d.dates.length - 1]}. The thick line is the trend.`;
+  $('chartEmpty').hidden = true;
   if (window.Plotly) {
+    const ink = '#3A2218', grid = '#EAD9BC';
     Plotly.newPlot('chart', [
-      {x: d.dates, y: d.values, mode: 'lines', name: 'Monthly regional mean', line: {color: '#6b8fc7', width: 1.5}},
-      {x: d.dates, y: d.fitted, mode: 'lines', name: 'Trend (Sen\'s slope)', line: {color: '#d9480f', width: 3}},
-    ], {title: d.name, yaxis: {title: d.units}, margin: {t: 40, r: 10}, legend: {orientation: 'h', y: -0.15}},
-    {responsive: true});
+      {x: d.dates, y: d.values, mode: 'lines', name: 'Monthly regional mean', line: {color: '#3B6FB6', width: 1.5}},
+      {x: d.dates, y: d.fitted, mode: 'lines', name: 'Trend (Sen\'s slope)', line: {color: '#176E7B', width: 3.5}},
+    ], {font: {family: '"Nunito Sans", system-ui, sans-serif', size: 14, color: ink},
+        paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
+        xaxis: {gridcolor: grid, linecolor: grid}, yaxis: {title: d.units, gridcolor: grid, zerolinecolor: '#6B4A3A'},
+        margin: {t: 8, r: 8, b: 40, l: 56}, legend: {orientation: 'h', y: -0.18}},
+    {responsive: true, displayModeBar: false});
   } else {
     $('err').textContent = 'The chart library could not be loaded (check the internet connection); results are shown below.';
+    $('chartEmpty').textContent = 'The chart library could not be loaded; the result card still shows the numbers.';
+    $('chartEmpty').hidden = false;
   }
 
   // all wording and number formatting comes from the server (app/display.py, unit-tested)
   $('cardTitle').textContent = d.headline;
   $('verdict').textContent = d.verdict;
   $('verdict').className = 'verdict ' + (d.significant && d.reliability !== 'low' ? 'sig' : 'nosig');
+  // the look of the card: significant / not significant yet / a notice when the test cannot be trusted
+  $('card').dataset.state = d.reliability === 'low' ? 'notice' : (d.significant ? 'significant' : 'notyet');
+  $('card').dataset.trend = d.slope_per_decade < 0 ? 'decreasing' : 'increasing';
   // the "?" next to the verdict explains "significant", or "not enough variation" for a low-reliability result
   $('verdictTip').dataset.tip = d.reliability === 'low' ? 'variation' : 'significant';
-  $('slope').textContent = `${d.slope_text} ${d.units} per decade` + (d.percent_text ? ` (${d.percent_text})` : '');
+  $('slopeNum').textContent = d.slope_text;
+  $('slopeUnit').textContent = `${d.units} per decade` + (d.percent_text ? ` (${d.percent_text})` : '');
   $('ci').textContent = d.range_text + (d.percent_range_text ? ` (${d.percent_range_text})` : '');
   $('ciLabel').textContent = d.method === 'corrected' ? '95% range (adjusted for autocorrelation)' : '95% range (plain)';
   $('p').textContent = d.p_value < 0.001 ? '< 0.001' : d.p_value.toFixed(3);
   $('len').textContent = `${d.record_years.toFixed(1)} years (${d.dates[0]} to ${d.dates[d.dates.length - 1]})`;
   $('cardNote').textContent = d.note ? 'Note: ' + d.note : '';
   $('plain').textContent = d.explanation;
+  const lens = lensList.find(l => l.id === d.lens);
+  $('lensTitle').textContent = lens ? `What this means: ${lens.name.toLowerCase()} lens` : 'What this means';
   $('lensMsg').textContent = d.lens_message || '';
   $('lensMsg').classList.toggle('hidden', !d.lens_message);
   $('lensCaveat').textContent = d.lens_caveat ? 'Lens caveat: ' + d.lens_caveat : '';
   $('lensCaveat').classList.toggle('hidden', !d.lens_caveat);
+  $('lensBlock').classList.toggle('empty', !d.lens_message && !d.lens_caveat);
+  $('resultState').hidden = true;
+  $('card').removeAttribute('aria-busy');
   $('card').classList.remove('hidden');
 }
 
-$('go').onclick = () => run().catch(e => $('err').textContent = 'Something went wrong: ' + e.message);
+$('go').onclick = () => { markScenario(null); return run().catch(e => $('err').textContent = 'Something went wrong: ' + e.message); };
 init().catch(e => loadFailed('Something went wrong while loading the page', e));
 </script>
 <!-- optional guide: name, tutorial steps and tips in config.js; behaviour in guide.js -->

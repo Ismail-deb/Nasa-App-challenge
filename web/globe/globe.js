@@ -95,7 +95,7 @@
       '<button type="button" data-view="globe" aria-pressed="false">Globe</button>' +
       '<button type="button" data-view="classic" aria-pressed="true">Classic view</button>';
     var controls = $('guideControls');
-    header.insertBefore(bar, controls ? controls.nextSibling : header.firstChild);
+    if (controls) controls.parentNode.insertBefore(bar, controls); else header.appendChild(bar);
 
     var note = document.createElement('p');
     note.id = 'viewNote';
@@ -114,7 +114,8 @@
       '</div>' +
       '<p class="globe-foot"><span>Click a highlighted region to load its trend below.</span>' +
       ' <span id="globeNote" hidden></span></p>';
-    main.insertBefore(panel, main.firstChild);
+    var slot = $('topGrid') || main;                 // left of the scenario panel in Globe view
+    slot.insertBefore(panel, slot.firstChild);
 
     ui = {bar: bar, note: note, panel: panel, box: $('globeBox'), tip: $('globeTip'),
           status: $('globeStatus'), globeNote: $('globeNote'),
@@ -128,6 +129,7 @@
 
   function setView(view) {
     state.view = view;
+    document.body.dataset.view = view;               // the page lays itself out per view; the guide reads it too
     ui.panel.hidden = view !== 'globe';
     [].forEach.call(ui.bar.querySelectorAll('button[data-view]'), function (b) {
       b.setAttribute('aria-pressed', String(b.dataset.view === view));

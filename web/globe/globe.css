@@ -1,15 +1,14 @@
 /* Optional 3D globe view (web/globe/globe.js): header switch and the dark "hologram" panel. */
 
-#viewToggle { float: right; display: flex; gap: 0; margin: 0 0 6px 12px; }
+#viewToggle { display: flex; gap: 0; padding: 4px; background: #EFE3CF; border: 1px solid var(--border, #EAD9BC); border-radius: 999px; }
 #viewToggle button {
-  background: rgba(255, 255, 255, .10); color: #fff; border: 1px solid rgba(255, 255, 255, .7);
-  padding: 5px 10px; font-size: .85rem; border-radius: 0;
+  background: transparent; color: var(--ink-2, #6B4A3A); border: 0; min-height: 36px; padding: 4px 16px;
+  font-size: .875rem; font-weight: 600; border-radius: 999px;
 }
-#viewToggle button:first-child { border-radius: 6px 0 0 6px; }
-#viewToggle button:last-child { border-radius: 0 6px 6px 0; border-left: 0; }
-#viewToggle button[aria-pressed="true"] { background: #fff; color: #0b3d91; font-weight: 600; }
-#viewToggle button:focus-visible { outline: 3px solid #ffb703; outline-offset: 2px; }
-#viewNote { margin: 6px 0 0; font-size: .8rem; color: #ffe08a; }
+#viewToggle button:hover { color: var(--ink, #3A2218); }
+#viewToggle button[aria-pressed="true"] { background: #fff; color: var(--ink, #3A2218); font-weight: 800; box-shadow: 0 1px 3px rgba(58, 34, 24, .15); }
+#viewToggle button:focus-visible { outline: 3px solid var(--teal-strong, #176E7B); outline-offset: 2px; }
+#viewNote { flex-basis: 100%; margin: 0; font-size: .875rem; color: var(--orange-ink, #A23900); font-weight: 600; }
 #viewNote[hidden], #globePanel[hidden], #globeTip[hidden], #globeNote[hidden], #globeStatus[hidden] { display: none !important; }
 
 .globe-panel { background: #02060f; border-color: #12324f; color: #cfefff; padding: 0; overflow: hidden; }

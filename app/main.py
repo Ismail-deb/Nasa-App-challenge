@@ -92,6 +92,7 @@ def list_presets():
     """Preset demo regions, their recommended lens, and which variables are ready for each."""
     entries = [e for _, e in common.iter_entries(common.load_catalog())]
     return [{"id": pid, "name": p["name"], "bbox": p["bbox"], "lens": p["lens"], "why": p.get("why"),
+             "default_variable": p.get("default_variable"), "source": p.get("source"),
              "variables": [e["id"] for e in entries if presets.series_path(e, pid).exists()]}
             for pid, p in presets.load_presets().items()]
 
