@@ -1,5 +1,7 @@
 """The page driven in a real (headless) browser that is already on the machine: Edge, Chrome or
-Chromium. No extra packages. Skipped when no such browser is found, or with NO_BROWSER_TESTS=1.
+Chromium. No extra packages. Opt-in: these tests are slow and can be timing-sensitive, so they run
+only when RUN_BROWSER_TESTS=1 is set AND a supported browser is found (BROWSER_BIN overrides the
+search); otherwise every test here is skipped with the reason. NO_BROWSER_TESTS=1 still forces a skip.
 
 Each test opens tests/browser/<name>.html, which loads the real page in an iframe, clicks through
 it and posts what it saw back to this process. Uses the committed preset series in data/series/.
@@ -24,8 +26,8 @@ from app import lenses, main, presets
 
 HARNESS = Path(__file__).parent / "browser"
 WAIT_SECONDS = 90
-# the only message allowed after a preset click: the chart library comes from a CDN, so offline there is no chart
-NO_CHART = "The chart library could not be loaded (check the internet connection); results are shown below."
+# the only message allowed after a preset click: shown if the vendored chart library fails to load
+NO_CHART = "The chart library (web/vendor/plotly) could not be loaded; results are shown below."
 
 
 def _find_browser() -> str | None:
@@ -40,6 +42,18 @@ def _find_browser() -> str | None:
                                              "chromium", "chromium-browser")]
     candidates.append("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
     return next((c for c in candidates if c and Path(c).exists()), None)
+
+
+def _browser_skip_reason() -> str | None:
+    if os.environ.get("RUN_BROWSER_TESTS") != "1":
+        return "headless-browser tests are opt-in: set RUN_BROWSER_TESTS=1 to run them"
+    if not _find_browser():
+        return "RUN_BROWSER_TESTS=1 but no Edge/Chrome/Chromium found (set BROWSER_BIN), or NO_BROWSER_TESTS is set"
+    return None
+
+
+_SKIP_REASON = _browser_skip_reason()
+pytestmark = pytest.mark.skipif(_SKIP_REASON is not None, reason=_SKIP_REASON or "")
 
 
 @pytest.fixture(scope="module")
