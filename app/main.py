@@ -1,17 +1,29 @@
-"""FastAPI backend. Reads pre-processed files only - never calls NASA."""
+"""FastAPI backend. Reads pre-processed files only - never calls NASA. Never writes to disk.
+
+Run locally:  uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}
+On Vercel:    the same `app` object, found via [tool.vercel] entrypoint in pyproject.toml.
+"""
+import json
+import math
+import os
+import re
+import sys
 from pathlib import Path
 
-import math
-import re
+# The top-level modules (common.py, stats.py) live in the project root. uvicorn run from the root
+# finds them anyway; a serverless host may start Python elsewhere, so make the root importable.
+_ROOT = str(Path(__file__).resolve().parent.parent)
+if _ROOT not in sys.path:
+    sys.path.insert(0, _ROOT)
 
-import yaml
-from fastapi import FastAPI, HTTPException, Response
-from fastapi.responses import FileResponse, JSONResponse
-from fastapi.staticfiles import StaticFiles
+import yaml  # noqa: E402
+from fastapi import FastAPI, HTTPException, Response  # noqa: E402
+from fastapi.responses import FileResponse, JSONResponse  # noqa: E402
+from fastapi.staticfiles import StaticFiles  # noqa: E402
 
-import common
-import stats
-from app import data, display, lenses, presets
+import common  # noqa: E402
+import stats  # noqa: E402
+from app import data, display, lenses, presets  # noqa: E402
 
 WEB = Path(__file__).resolve().parent.parent / "web"
 app = FastAPI(title="Earth System Trend Detective")
@@ -28,6 +40,13 @@ def _entry(variable: str) -> dict:
         return data.find_entry(variable)
     except KeyError:
         raise HTTPException(404, f"Unknown variable {variable!r}")
+
+
+@app.get("/health")
+def health():
+    """Liveness check for hosts and uptime monitors: no file reads beyond the preset list."""
+    return {"status": "ok", "presets": len(presets.load_presets()),
+            "full_dataset": common.PROCESSED_DIR.is_dir()}
 
 
 @app.get("/categories")
@@ -229,11 +248,20 @@ LOCAL_CONFIG = FRONTEND / "config.local.js"     # git-ignored; holds the Cesium 
 NO_TOKEN_JS = 'window.CESIUM_ION_TOKEN = window.CESIUM_ION_TOKEN || "";\n'
 
 
+TOKEN_ENV = "CESIUM_ION_TOKEN"   # hosted deployments: set in the host's environment settings
+
+
 @app.get("/frontend/config.local.js", include_in_schema=False)
 def local_config():
-    """The local token file, or an empty-token stand-in: never a 404 (no console noise)."""
-    path = LOCAL_CONFIG
-    js = path.read_text(encoding="utf-8") if path.is_file() else NO_TOKEN_JS
+    """The ion token for the globe. Order: the CESIUM_ION_TOKEN environment variable (hosting),
+    else the git-ignored local file, else an empty-token stand-in: never a 404 (no console noise).
+    The token is never logged; note that any browser-side token is visible to visitors."""
+    token = os.environ.get(TOKEN_ENV, "").strip()
+    if token:
+        js = f"window.CESIUM_ION_TOKEN = {json.dumps(token)};\n"
+    else:
+        path = LOCAL_CONFIG
+        js = path.read_text(encoding="utf-8") if path.is_file() else NO_TOKEN_JS
     return Response(js, media_type="text/javascript", headers=NO_CACHE)
 
 

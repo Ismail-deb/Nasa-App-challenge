@@ -3,7 +3,6 @@ from functools import lru_cache
 
 import numpy as np
 import pandas as pd
-import xarray as xr
 
 import common
 from common import iter_entries, load_catalog
@@ -23,12 +22,16 @@ def find_entry(var_id: str) -> dict:
 
 
 @lru_cache(maxsize=8)
-def _open(path: str, mtime: float) -> xr.DataArray:
+def _open(path: str, mtime: float):
+    # imported here, not at the top: the hosted app serves preset series only and does not
+    # install xarray/h5netcdf (requirements-data.txt); only gridded custom regions need them
+    import xarray as xr
+
     ds = xr.open_dataset(path, engine=common.NC_ENGINE)
     return ds[list(ds.data_vars)[0]]
 
 
-def load_dataarray(entry: dict) -> xr.DataArray:
+def load_dataarray(entry: dict):
     p = common.processed_path(entry)
     if not p.exists():
         raise FileNotFoundError(

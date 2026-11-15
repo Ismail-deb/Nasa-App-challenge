@@ -1,0 +1,24 @@
+# Project metadata, the Vercel entry point and pytest settings.
+# Dependencies mirror requirements.txt (runtime only) so either manifest gives the same install.
+[project]
+name = "earth-system-trend-detective"
+version = "1.0.0"
+description = "Regional climate-trend screening from NASA MERRA-2, GPM IMERG and GLDAS data"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "fastapi==0.162.7",
+    "uvicorn==0.54.0",
+    "PyYAML==6.0.3",
+    "numpy==2.5.4",
+    "pandas==3.1.1",
+    "pymannkendall==1.4.3",
+    "scipy==1.18.1",
+]
+
+[tool.vercel]
+# the FastAPI instance `app` in app/main.py (also what `uvicorn app.main:app` runs locally)
+entrypoint = "app.main:app"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

@@ -1,0 +1,6 @@
+# Everything for running the test suite: the app, the data pipeline (tests build tiny synthetic
+# NetCDF files) and pytest. Map generation is separate: requirements-maps.txt (those tests skip without it).
+-r requirements.txt
+-r requirements-data.txt
+pytest==9.2.0
+httpx==0.28.1
