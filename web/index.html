@@ -15,7 +15,8 @@
   .row { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; }
   label { display: grid; gap: 4px; font-size: .8rem; font-weight: 600; }
   input, select, button { font: inherit; padding: 6px 8px; border: 1px solid #b8c2cc; border-radius: 6px; }
-  input[type=number] { width: 90px; }
+  input.coord { width: 90px; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
   button { background: #0b3d91; color: #fff; border: 0; cursor: pointer; padding: 8px 16px; }
   button.secondary { background: #e8eef8; color: #0b3d91; }
   #desc { font-size: .9rem; margin: 10px 0 0; }
@@ -41,16 +42,16 @@
     <div class="row">
       <label>Lens <select id="lens"><option value="">None</option></select></label>
       <label>Variable <select id="variable"></select></label>
-      <label>West <input type="number" id="w" step="0.5" value="-117"></label>
-      <label>South <input type="number" id="s" step="0.5" value="31.3"></label>
-      <label>East <input type="number" id="e" step="0.5" value="-109"></label>
-      <label>North <input type="number" id="n" step="0.5" value="38"></label>
+      <label>West <input type="text" inputmode="decimal" class="coord" id="w" value="-117"></label>
+      <label>South <input type="text" inputmode="decimal" class="coord" id="s" value="31.3"></label>
+      <label>East <input type="text" inputmode="decimal" class="coord" id="e" value="-109"></label>
+      <label>North <input type="text" inputmode="decimal" class="coord" id="n" value="38"></label>
       <label>Start <input type="month" id="start" value="2000-01"></label>
       <label>End <input type="month" id="end"></label>
       <label style="grid-auto-flow:column;align-items:center"><input type="checkbox" id="deseason" checked> Remove seasonal cycle</label>
     </div>
     <div class="row" style="margin-top:12px">
-      <button id="go">Show trend</button>
+      <button id="go" disabled>Show trend</button>
       <span id="demos"></span>
     </div>
     <p id="desc"></p><p id="note"></p>
@@ -93,22 +94,60 @@ function showDesc() {
 }
 
 // the variable dropdown shows only the selected lens's variables (all variables for "None")
+const LOAD_FAIL = "Couldn't load variables - is the server running the latest code? (Stop it with Ctrl+C and start it again.)";
+
+// "Show trend" works only while a variable is selected
+function updateGo() { $('go').disabled = !$('variable').value; }
+
+function loadFailed(what, e) {
+  $('err').textContent = `${what} (${e.message})`;
+  updateGo();
+}
+
+// Bounding-box fields accept "31.3" and "31,3" (comma-decimal locales, e.g. South Africa).
+// Returns NaN for anything that is not a number.
+function parseCoord(s) {
+  const t = String(s).trim().replace(',', '.');
+  return /^[-+]?(\d+\.?\d*|\.\d+)$/.test(t) ? parseFloat(t) : NaN;
+}
+// what the fields are filled with: always a plain dot-decimal number, which parseCoord reads back
+function fmtCoord(x) { return String(x); }
+
 async function loadVars(keep) {
   const lens = $('lens').value;
-  vars = await api('/variables' + (lens ? '?lens=' + encodeURIComponent(lens) : ''));
+  try {
+    vars = await api('/variables' + (lens ? '?lens=' + encodeURIComponent(lens) : ''));
+  } catch (e) {
+    vars = [];
+    $('variable').innerHTML = '';
+    loadFailed(LOAD_FAIL, e);
+    return false;
+  }
   $('variable').innerHTML = vars.map(v => `<option value="${v.id}">${v.name} – ${v.units}${v.has_data ? '' : ' (no data yet)'}</option>`).join('');
   if (keep && vars.some(v => v.id === keep)) $('variable').value = keep;
   showDesc();
+  updateGo();
+  return vars.length > 0;
 }
 
 async function init() {
-  lensList = await api('/lenses');
-  $('lens').innerHTML = '<option value="">None</option>' +
-    lensList.map(l => `<option value="${l.id}" title="${l.description}">${l.name}</option>`).join('');
-  $('lens').onchange = () => loadVars($('variable').value).catch(e => $('err').textContent = e.message);
-  $('variable').onchange = showDesc;
+  $('variable').onchange = () => { showDesc(); updateGo(); };
+  // variables first and on their own, so a missing /lenses or /presets cannot empty the dropdown
   await loadVars();
-  const presets = await api('/presets');
+  try {
+    lensList = await api('/lenses');
+    $('lens').innerHTML = '<option value="">None</option>' +
+      lensList.map(l => `<option value="${l.id}" title="${l.description}">${l.name}</option>`).join('');
+    $('lens').onchange = () => loadVars($('variable').value);
+  } catch (e) {
+    lensList = [];
+    $('lens').disabled = true;
+    $('err').textContent = `Couldn't load lenses - is the server running the latest code? (${e.message})`;
+  }
+  let presets = [];
+  try { presets = await api('/presets'); } catch (e) {
+    $('err').textContent = `Couldn't load the demo regions - is the server running the latest code? (${e.message})`;
+  }
   const lensName = id => (lensList.find(l => l.id === id) || {name: id}).name;
   $('demos').innerHTML = presets.map(p =>
     `<button class="secondary" data-id="${p.id}" title="${p.why || ''}">Demo: ${p.name} (${lensName(p.lens)})</button>`).join(' ');
@@ -119,11 +158,17 @@ async function init() {
 // a demo button selects its region, its lens and the lens's default variable
 // (or, if that has no data for this region yet, the first lens variable that does)
 async function demo(p) {
-  [$('w').value, $('s').value, $('e').value, $('n').value] = p.bbox;
-  $('lens').value = p.lens;
+  [$('w').value, $('s').value, $('e').value, $('n').value] = p.bbox.map(fmtCoord);
   const l = lensList.find(x => x.id === p.lens);
-  const ready = l.variables.map(v => v.id).filter(id => p.variables.includes(id));
-  await loadVars(ready.includes(l.default_variable) ? l.default_variable : (ready[0] || l.default_variable));
+  let want;
+  if (l) {
+    $('lens').value = p.lens;
+    const ready = l.variables.map(v => v.id).filter(id => p.variables.includes(id));
+    want = ready.includes(l.default_variable) ? l.default_variable : (ready[0] || l.default_variable);
+  } else {
+    want = p.variables[0];                 // lenses unavailable: just pick a variable with data
+  }
+  if (!(await loadVars(want))) return;
   await run();
 }
 
@@ -134,7 +179,13 @@ async function run() {
     $('err').textContent = `${v.name}: data not available yet. It will appear here once it has been exported; try another variable.`;
     return;
   }
-  const bbox = [$('w').value, $('s').value, $('e').value, $('n').value].join(',');
+  if (!$('variable').value) { $('err').textContent = LOAD_FAIL; return; }
+  const box = [$('w').value, $('s').value, $('e').value, $('n').value].map(parseCoord);
+  if (box.some(Number.isNaN)) {
+    $('err').textContent = 'The region needs four numbers (West, South, East, North in degrees), e.g. 31.3 or 31,3.';
+    return;
+  }
+  const bbox = box.join(',');
   const q = new URLSearchParams({variable: $('variable').value, bbox, deseasonalize: $('deseason').checked});
   if ($('lens').value) q.set('lens', $('lens').value);
   if ($('start').value) q.set('start', $('start').value);
@@ -171,7 +222,7 @@ async function run() {
 }
 
 $('go').onclick = () => run().catch(e => $('err').textContent = 'Something went wrong: ' + e.message);
-init().catch(e => $('err').textContent = e.message);
+init().catch(e => loadFailed('Something went wrong while loading the page', e));
 </script>
 </body>
 </html>

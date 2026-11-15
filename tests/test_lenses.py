@@ -198,3 +198,48 @@ def test_frontend_has_lens_selector_and_no_duplicate_demo_buttons():
     assert 'id="lens"' in html and "/lenses" in html and "lens_message" in html and "lens_caveat" in html
     assert html.count("Demo: ") == 1                            # one button template, one per preset
     assert "data not available yet" in html
+
+
+# ---------------------------------------------------------------- page robustness and locale
+# pytest cannot run the page's JavaScript (the behaviour was checked in a real browser); these pin
+# the structure that makes it robust, and the server-side half of the locale problem.
+
+def _page() -> str:
+    return (common.ROOT / "web" / "index.html").read_text(encoding="utf-8")
+
+
+def test_bbox_fields_are_text_inputs_not_locale_dependent_number_inputs():
+    html = _page()
+    for field in ("w", "s", "e", "n"):
+        tag = next(l for l in html.splitlines() if f'id="{field}"' in l and "<input" in l)
+        assert 'type="text"' in tag and 'inputmode="decimal"' in tag and "type=\"number\"" not in tag
+    assert "type=\"number\"" not in html
+
+
+def test_page_normalises_comma_decimals_and_fills_fields_with_dots():
+    html = _page()
+    assert ".replace(',', '.')" in html and "function parseCoord" in html
+    assert "parseCoord" in html.split("async function run()")[1]          # used when building the request
+    assert "p.bbox.map(fmtCoord)" in html and "function fmtCoord(x) { return String(x); }" in html
+    assert "The region needs four numbers" in html                        # a bad value gets a message
+
+
+def test_page_loads_variables_first_and_survives_a_missing_endpoint():
+    html = _page()
+    init = html.split("async function init()")[1].split("async function demo")[0]
+    assert init.index("await loadVars()") < init.index("api('/lenses')") < init.index("api('/presets')")
+    for what in ("Couldn't load variables - is the server running the latest code?",
+                 "Couldn't load lenses", "Couldn't load the demo regions"):
+        assert what in html
+    assert '<button id="go" disabled>' in html and "function updateGo()" in html
+    assert "$('go').disabled = !$('variable').value" in html
+
+
+def test_comma_decimal_bbox_is_a_clear_400_not_a_crash(client):
+    c, put = client
+    put("WIND50M", "M2TMNXSLV/WIND50M", "m s-1", np.full(240, 5.0))
+    for bad in ("-117,31,3,-109,38", "-117,31,3,-109,38,0"):                # "31,3" pasted unnormalised
+        r = c.get("/trend", params={"variable": "M2TMNXSLV/WIND50M", "bbox": bad})
+        assert r.status_code == 400 and "four numbers" in r.json()["detail"]
+    ok = c.get("/trend", params={"variable": "M2TMNXSLV/WIND50M", "bbox": "-1,-1,1,1"})
+    assert ok.status_code == 200
