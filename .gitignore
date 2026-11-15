@@ -18,3 +18,11 @@ check.log
 logs/
 # Cesium ion token for the globe view: local only, never committed (copy config.local.example.js)
 frontend/config.local.js
+# stated explicitly (already covered by data/* above): the multi-GB inputs never go into git
+data/raw/
+data/processed/
+# other caches and local tool state
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+.vercel/

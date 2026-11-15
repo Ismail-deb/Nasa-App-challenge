@@ -5,7 +5,29 @@ NASA Space Apps Challenge project. Pick an Earth-science variable measured by NA
 > Status: prototype. Four demo regions (US Southwest, Great Plains, Pacific Northwest, California
 > Central Valley) work out of the box with temperature, precipitation, soil moisture, 50 m wind,
 > runoff, evaporation, snow and aerosol optical depth. Four lenses (solar, wind, hydro, farming)
-> add a plain-language sentence to the result. The interactive globe is still to come.
+> add a plain-language sentence to the result. A 3D globe and a terrain map show the regions and
+> per-cell trend maps.
+
+**In short:** the tool takes about 26 years of monthly NASA satellite and model data, averages it
+over a region, removes the yearly seasonal cycle, and tells you whether the remaining long-term
+change is bigger than natural month-to-month wobble could produce by chance. It is a screening
+tool: it points at regions and variables worth a closer look; it does not explain causes.
+
+### Fastest start (one command sequence)
+From a fresh clone, with Python 3.12 installed (Windows PowerShell; on macOS/Linux use
+`python3` and `source venv/bin/activate`):
+```
+git clone https://github.com/Ismail-deb/Nasa-App-challenge.git
+cd Nasa-App-challenge
+python -m venv venv
+venv\Scripts\activate
+pip install -r requirements.txt
+uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
+Then open http://127.0.0.1:8000. (On a host that sets `$PORT`, use `--port ${PORT:-8000}`.)
+The Cesium ion token is **optional**: without it the globe runs in offline mode (no terrain). To
+add one, copy `frontend/config.local.example.js` to `frontend/config.local.js` (git-ignored) and
+paste your token there. The step-by-step version follows.
 
 ## Run the app (quick start)
 
@@ -13,10 +35,12 @@ You do **not** need a NASA account or any big downloads to run the demo: the fou
 read small data files that are already in this repository (`data/series/`).
 
 ### 1. Install the prerequisites (once per computer)
-- **Python 3.11 or newer.** Check with `python --version`.
+- **Python 3.12** (the version in `.python-version`). Check with `python --version`.
   On Windows, if it is missing: `winget install Python.Python.3.12`, then close and reopen the terminal.
 - **Git**, to download the code. Check with `git --version`.
-- An **internet connection** while using the app: the chart library (Plotly) loads from a CDN.
+- No internet connection is needed while using the app: the chart library (Plotly 2.35.2,
+  `web/vendor/plotly/`) and CesiumJS (`frontend/vendor/cesium/`) are in the repository. Only the
+  optional globe terrain and imagery come from Cesium ion over the network.
 
 ### 2. Download the code (once)
 Open a terminal (Windows: **PowerShell**; macOS/Linux: **Terminal**) in the folder where you want
@@ -61,6 +85,11 @@ press **Ctrl+C** in it to stop the server.
 If `uvicorn` is "not recognized", the environment is not active; use
 `python -m uvicorn app.main:app --port 8000` instead, or activate it first.
 
+`requirements.txt` holds only what the web app needs. Optional extra sets:
+`requirements-dev.txt` (the test suite, and the data pipeline it exercises),
+`requirements-data.txt` (downloading NASA data, and custom regions from the full gridded files)
+and `requirements-maps.txt` (only for regenerating the trend maps).
+
 ### 5. Use it
 1. Optionally pick a **lens** (Solar, Wind, Hydro, Farming): the variable dropdown then shows
    only that lens's variables, and the result card adds a plain-language sentence and caveat.
@@ -91,11 +120,59 @@ is defined there once, as `GUIDE_NAME`; the three poses are in `web/guide/assets
 cannot be loaded, a small drawn drone takes his place. To see the first-visit tutorial again, use
 the replay button, or clear the site data for the page.
 
+### Views: Globe, Terrain map and Classic
+The header has a **Globe | Classic view** switch (the choice is remembered).
+- **Classic view**: the scenario cards, the region/period form, the chart and the result card.
+- **Globe**: a 3D Earth (CesiumJS) with the four demo regions drawn as boxes; click a box to load
+  that region's trend below, exactly as its Demo button does. Above the globe, **Earth | Terrain
+  map** switches between the round globe and a flat, tilted terrain map of the US.
+- **Globe controls**: drag to rotate, scroll or pinch to zoom, right-drag (or Ctrl-drag) to tilt.
+  **Top-down** looks straight down. With a Cesium token, a **Terrain** switch and a **Terrain
+  height** slider (vertical exaggeration) appear; the Terrain map has its own height slider and a
+  **Contours** switch. The **Trend map** switch drapes a per-cell trend layer over the US, with a
+  **Variable** picker, an opacity slider and a legend; hovering a cell shows its value. If WebGL or
+  the globe cannot load, the page falls back to the Classic view with a note.
+
 ### Run the tests (optional)
 ```
-python -m pytest -q
+pip install -r requirements-dev.txt
+pytest -q
 ```
-All tests are offline (no NASA access needed). A few of them click through the page in the Edge or Chrome already installed on the machine (headless, no window); they are skipped if neither is found, or with the environment variable `NO_BROWSER_TESTS=1`.
+All tests are offline (no NASA access needed) and deterministic (the simulation tests use fixed
+seeds). The full run takes about 3 minutes, mostly the statistical simulations in
+`tests/test_stats.py`. The trend-map generator tests skip unless `requirements-maps.txt` is installed.
+
+The **headless-browser tests** (`tests/test_page_browser.py`, which click through the real page in
+Edge or Chrome) are slow and timing-sensitive, so they are **opt-in**: they run only when the
+environment variable `RUN_BROWSER_TESTS=1` is set **and** Edge, Chrome or Chromium is found
+(`BROWSER_BIN` can point to a specific browser). Otherwise they are skipped with that reason.
+```
+$env:RUN_BROWSER_TESTS = "1"; pytest -q tests/test_page_browser.py     # PowerShell
+RUN_BROWSER_TESTS=1 pytest -q tests/test_page_browser.py               # macOS/Linux
+```
+
+### Hosting (Vercel, or Render as a fallback)
+The hosted version serves the four preset scenarios and the trend-map layers only; the multi-GB
+gridded data is not in git, so a typed custom region gets the message "Custom regions need the full
+dataset" (never a crash).
+- **Vercel**: import the repository. Vercel detects FastAPI and loads the `app` object from
+  `app/main.py`, set explicitly in `pyproject.toml` as `[tool.vercel] entrypoint = "app.main:app"`.
+  It installs the runtime-only dependencies (`requirements.txt`, mirrored in `pyproject.toml`) on
+  Python 3.12 (`.python-version`). `vercel.json` keeps tests, design files, logs, virtual
+  environments, `data/raw`, `data/processed` and caches out of the function bundle; `data/series`,
+  `data/maps`, `web/`, `frontend/` and the YAML configs stay in. `/static` (page assets, fonts,
+  guide, vendored Plotly) and `/vendor/cesium` are `StaticFiles` mounts, which Vercel serves from its
+  CDN; `/`, `/maps/*` and the API are answered by the function from files in the bundle. The app
+  never writes to disk.
+- **Render** (fallback): a Python web service with build command `pip install -r requirements.txt`
+  and start command `uvicorn app.main:app --host 0.0.0.0 --port $PORT`.
+- **Locally**, the same app: `uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}`.
+- `GET /health` returns `{"status": "ok", ...}` for uptime checks.
+- **Cesium token on a host**: set the environment variable `CESIUM_ION_TOKEN` in the host's
+  settings; the server then serves it through `/frontend/config.local.js` (no file is written and
+  the token is never logged or committed). Without it, behaviour is unchanged (the local file if
+  present, else the offline globe). **A browser-side ion token is visible to every visitor**, so in
+  the Cesium ion dashboard restrict the token to your site's URL(s) and keep its scopes minimal.
 
 ### Troubleshooting
 | Problem | Fix |
@@ -103,10 +180,10 @@ All tests are offline (no NASA access needed). A few of them click through the p
 | `python` not found (Windows) | Install Python (step 1), then open a **new** terminal. |
 | `No module named 'fastapi'` (or similar) | The environment is not active, or step 3 was skipped: run `venv\Scripts\activate`, then `pip install -r requirements.txt`. |
 | `address already in use` / port 8000 busy | Another copy is running. Stop it, or use another port: `uvicorn app.main:app --port 8001` and open http://127.0.0.1:8001. |
-| Buttons do nothing / no chart | Check the internet connection (the chart library loads from the web), then reload with Ctrl+F5. |
+| Buttons do nothing / no chart | Reload with Ctrl+F5. If the page says the chart library could not be loaded, check that `web/vendor/plotly/plotly.min.js` is in your copy. |
 | "Region/variable not available yet, try a preset" | That variable has no data for that region yet; use a Demo button or another variable. |
 | "This is a custom region ... Custom regions need the full dataset" | The four numbers do not match a demo region, and this copy has no gridded files (they are multi-GB and stay on the machine that downloaded them). Use a Demo button. |
-| `ImportError: DLL load failed ... _netCDF4` (Windows) | Harmless for this app: it reads files with `h5netcdf`, which is in `requirements.txt`. |
+| `ImportError: DLL load failed ... _netCDF4` (Windows) | Harmless for this app: it reads gridded files with `h5netcdf` (in `requirements-data.txt`). |
 
 ## Downloading NASA data (only for developers adding data)
 
@@ -262,6 +339,11 @@ correction usually changes nothing. Example: for 2 m temperature over the US Sou
 to **+0.25 to +0.72**, and the trend stays significant (p = 0.00005). `method=plain` in the API
 selects the basic test; the unadjusted range is also returned as `ci_plain_low/high_per_decade`.
 
+**Trend maps (per grid cell).** The globe's trend maps run the same test in every grid cell. With
+thousands of cells, some would come out "significant" by luck alone, so the maps control the
+*false discovery rate* (Benjamini-Hochberg) at **10%**: among the cells marked significant, at most
+about 1 in 10 is expected to be a false alarm.
+
 **Limitations.**
 - The corrected test is still slightly generous: about 7% false alarms instead of 5%, and more for
   very persistent data or records shorter than about 10 years.
@@ -317,27 +399,45 @@ API: `GET /lenses`; `GET /variables?lens=solar` (only that lens's variables); `G
 /trend?...&lens=solar` adds `lens_message` and `lens_caveat`, with a 400 error if the variable is
 not in that lens.
 
-## Data sources
-- NASA GES DISC, accessed with `earthaccess`: MERRA-2 `M2TMNXSLV` (temperature, 50 m wind),
-  GPM IMERG `GPM_3IMERGM` v07 (precipitation), GLDAS Noah `GLDAS_NOAH025_M` v2.1 (soil moisture).
+## Data sources and credits
+- **NASA MERRA-2** (GMAO, NASA; via GES DISC): `M2TMNXSLV` 2 m temperature and 50 m wind,
+  `M2TMNXRAD` surface solar radiation and cloud cover, `M2TMNXAER` aerosol optical depth.
+- **NASA GPM IMERG** final run, monthly, v07 (`GPM_3IMERGM`, via GES DISC): precipitation.
+- **NASA GLDAS** Noah land-surface model v2.1 (`GLDAS_NOAH025_M`, via GES DISC): soil moisture,
+  evaporation, surface runoff, snow water equivalent, snow depth and snowfall.
+- Data accessed with `earthaccess` from NASA Earthdata / GES DISC. Learning material: the NASA
+  GES DISC tutorials, https://github.com/nasa/gesdisc-tutorials (read-only reference; not modified
+  or included).
+- **Natural Earth** (public domain): country boundaries for the US mask and outline on the maps.
+- **CesiumJS** (Apache 2.0, vendored in `frontend/vendor/cesium/`): the 3D globe; optional terrain
+  and imagery from Cesium ion.
+- **Plotly.js** 2.35.2 (MIT, vendored in `web/vendor/plotly/` with its licence): the chart.
+- **Nunito Sans** (SIL Open Font License 1.1, `web/fonts/OFL.txt`): the typeface.
+- Guide artwork generated with AI (Google Gemini): the pictures of Comet the fox.
+- `design/stitch/` (`code.html`, `screen.png`, `DESIGN.md`) is a design reference for the page's
+  look; it is not used at runtime.
 
-## Limitations
-- Monthly data only; linear trends (Sen's slope) over a limited record.
-- Reanalysis (MERRA-2) is model output assimilating observations – indicative, not station truth.
-- Regional screening only; not site-level feasibility or irrigation scheduling.
-- **Wind:** this is 50 m wind speed computed from monthly-mean wind components (speed of the mean
-  vector); it underestimates average wind speed and is useful for relative change over time, not
-  for absolute wind resource. Because winds change direction during a month, the mean vector is
-  shorter than the average speed; the preset regions show about 2-3 m/s, well below real 50 m
-  averages. Do not use these values to size turbines or estimate energy yield.
-- **Soil moisture** (GLDAS) is a land-surface model estimate driven by observations, not a direct
-  measurement, averaged over the whole region; shown in kg/m², the same as mm of water in the top 10 cm.
-- **Different record lengths:** each variable ends when its NASA product does. Currently
-  temperature and wind run 2000-01 to 2026-09, soil moisture to 2026-07, and precipitation to
-  2025-09 (IMERG's final product lags by about a year). The app shows each variable's real period;
-  trends for different variables cover slightly different years.
-
-## Credits
-- Guide artwork generated with AI (Google Gemini).
-- Data: NASA GES DISC / Earthdata. MERRA-2: GMAO, NASA.
-- Learning material: NASA GES DISC tutorials, https://github.com/nasa/gesdisc-tutorials (read-only reference; not modified or included).
+## Known limitations
+- **GLDAS soil moisture and evaporation maps show model-input artefacts.** GLDAS is a model driven
+  by changing input datasets, and some patterns in the per-cell maps follow those inputs (sharp
+  edges, blocky areas) rather than real change. A screen of the preset series also found abrupt
+  level shifts in some GLDAS series (for example Pacific Northwest evaporation around 2003), which
+  a straight-line trend can mistake for gradual change. Treat GLDAS trends as indicative.
+- **Wind speed underestimates.** It is computed from monthly-mean wind components (the speed of
+  the mean vector), which is shorter than the average speed when winds change direction; the
+  preset regions show about 2-3 m/s, well below real 50 m averages. Use it for relative change
+  over time only, never to size turbines or estimate energy yield.
+- **Precipitation ends 2025-09** (IMERG's final product lags by about a year); temperature and wind
+  run 2000-01 to 2026-09 and soil moisture to 2026-07, so trends for different variables cover
+  slightly different years. The app shows each variable's real period.
+- **Custom regions only work where the full processed data is installed** (`data/processed/`,
+  multi-GB, not in git). A fresh clone or the hosted site answers the four demo regions only.
+- **Regional screening, not site analysis.** Every value is an average over a large region; local
+  conditions can differ a lot. Not site-level feasibility, irrigation scheduling or advice.
+- **Trends are not attributed to causes.** A significant trend says a change is unlikely to be
+  chance; it does not say why it happened.
+- Monthly data and straight-line trends over a ~26-year record: a straight line cannot describe a
+  change that speeds up, reverses or happens as a sudden step, and slow natural cycles (such as
+  El Nino) can look like a trend in a short record.
+- MERRA-2 and GLDAS are model output that assimilates or is driven by observations: indicative,
+  not station truth. Soil moisture is shown in kg/m², the same as mm of water in the top 10 cm.
