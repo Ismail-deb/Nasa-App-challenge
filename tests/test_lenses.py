@@ -291,3 +291,8 @@ def test_lens_load_failure_message_is_persistent_and_next_to_the_control():
     assert "$('lensStatus').textContent" in html.split("async function init()")[1]
     run = html.split("async function run()")[1].split("async function")[0]
     assert "lensStatus" not in run                                      # run() must not clear it
+
+
+def test_favicon_request_is_not_a_404():
+    r = TestClient(__import__("app.main", fromlist=["app"]).app).get("/favicon.ico")
+    assert r.status_code == 204 and not r.content

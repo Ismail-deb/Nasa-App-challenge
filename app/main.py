@@ -3,7 +3,7 @@ from pathlib import Path
 
 import math
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Response
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -187,6 +187,12 @@ def trend(variable: str, bbox: str, start: str | None = None, end: str | None = 
         "source": source,       # "preset_series" (data/series/) or "gridded" (data/processed/)
         "region": region,       # preset id when the bbox matches one, else null
     }
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon():
+    """No icon: answer 204 so browsers stop logging a 404 for it."""
+    return Response(status_code=204)
 
 
 @app.get("/")
